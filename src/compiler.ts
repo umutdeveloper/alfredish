@@ -68,7 +68,9 @@ export function deps(d: Def): Def[] {
       return [d.on, ...own];
     case "goal":
     case "promise":
-      return [...d.requires, ...own, ...(d.kind === "promise" && typeof d.due !== "string" ? verifyDeps(d.due) : [])];
+      return [...d.requires, ...own];
+    case "idea":
+      return []; // a revisit condition is not a dependency: ideas are never red
     default:
       return own;
   }
@@ -77,6 +79,8 @@ export function deps(d: Def): Def[] {
 function children(d: Def): Def[] {
   const out: Def[] = d.kind === "session" ? [] : [d.origin];
   out.push(...deps(d));
+  if (d.kind === "idea") out.push(...verifyDeps(d.verify));
+  if (d.kind === "promise" && typeof d.due !== "string") out.push(...verifyDeps(d.due));
   if (d.kind === "decision" && d.supersedes) out.push(d.supersedes);
   if (d.kind === "event") out.push(...d.affects);
   if (d.kind === "fact" && d.parked) out.push(...verifyDeps(d.parked.revisitWhen));
@@ -130,6 +134,20 @@ export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext): 
   }
 }
 
+/** A condition "comes true" when satisfied; a derived condition when every input is satisfied (SPEC §5). */
+export async function conditionStatus(v: Verify, today: ISODate, ctx: ProbeContext, seen = new Set<Def>()): Promise<Status> {
+  if (v.kind !== "derived") return (await evalVerify(v, today, ctx)).status;
+  let unknown = false;
+  for (const input of v.from) {
+    if (!isPresent(input) || seen.has(input)) continue;
+    seen.add(input);
+    const s = await conditionStatus(input.verify, today, ctx, seen);
+    if (s === "red" || s === "yellow") return "red";
+    if (s === "unknown") unknown = true;
+  }
+  return unknown ? "unknown" : "green";
+}
+
 function deadline(start: ISODate, end: ISODate, today: ISODate, label: string): { status: Status; reason?: string } {
   const total = Math.max(1, ageInDays(start, end));
   const left = ageInDays(today, end);
@@ -152,13 +170,14 @@ async function ownStatus(d: Def, o: CompileOptions): Promise<{ status: Status; r
   }
   if (!isPresent(d)) return { status: "green", reasons };
 
+  if (d.kind === "idea") {
+    // Never red: the revisit condition coming true is the signal.
+    const c = await conditionStatus(d.verify, o.today, o.ctx);
+    if (c === "green") return { status: "yellow", reasons: [`revisit: ${d.reason}`] };
+    return { status: c === "unknown" ? "unknown" : "green", reasons };
+  }
   const v = await evalVerify(d.verify, o.today, o.ctx);
   switch (d.kind) {
-    case "idea": {
-      // Never red: the revisit condition coming true is the signal.
-      if (v.status === "green") return { status: "yellow", reasons: [`revisit: ${d.reason}`] };
-      return { status: v.status === "unknown" ? "unknown" : "green", reasons };
-    }
     case "promise":
     case "goal": {
       if (v.status === "green") return { status: "green", reasons };
@@ -170,9 +189,9 @@ async function ownStatus(d: Def, o: CompileOptions): Promise<{ status: Status; r
         const w = deadline(d.origin.at, d.due, o.today, "due date");
         return { status: w.status, reasons: w.reason ? [w.reason] : [] };
       }
-      const c = await evalVerify(d.due, o.today, o.ctx);
-      if (c.status === "green") return { status: "red", reasons: ["due condition came true and it is not done"] };
-      return { status: c.status === "unknown" ? "unknown" : "green", reasons };
+      const c = await conditionStatus(d.due, o.today, o.ctx);
+      if (c === "green") return { status: "red", reasons: ["due condition came true and it is not done"] };
+      return { status: c === "unknown" ? "unknown" : "green", reasons };
     }
     default: {
       let status = v.status;
@@ -245,8 +264,7 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
   let parked = 0;
   const parkedCheck = async (id: string, p: { reason: string; revisitWhen: Verify }) => {
     parked++;
-    const v = await evalVerify(p.revisitWhen, o.today, o.ctx);
-    if (v.status === "green") issues.push({ id, status: "yellow", rule: "K12", message: `parked, revisit condition came true: ${p.reason}` });
+    if ((await conditionStatus(p.revisitWhen, o.today, o.ctx)) === "green") issues.push({ id, status: "yellow", rule: "K12", message: `parked, revisit condition came true: ${p.reason}` });
   };
   for (const d of defs) {
     if (d.kind === "fact" && !used.has(d)) {

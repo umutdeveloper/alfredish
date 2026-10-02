@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { compile, ttlStatus } from "../src/compiler.ts";
 import { formatCheck } from "../src/format.ts";
 import {
-  account, after, agentProbe, asset, claim, confirm, decision, fact, file, finding, fromFinding, goal, header, idea, local,
+  account, after, agentProbe, asset, claim, confirm, decision, derived, fact, file, finding, fromFinding, goal, header, idea, local,
   page, promise, raw, research, review, rule, source,
 } from "../src/dsl.ts";
 import type { PresentDef } from "../src/types.ts";
@@ -109,6 +109,24 @@ describe("promises, goals and ideas", () => {
   it("a goal whose phase ended without its done condition is red", async () => {
     const g = goal({ id: "g", title: "g", origin: s1, phase: { name: "weeks 1-2", ends: "2026-10-02" }, requires: [], doneWhen: notDone, evidence: "live" });
     expect(await status([g], "g", { "https://s": { body: "" } })).toBe("red");
+  });
+
+  it("a derived condition comes true only when its inputs are satisfied, and an idea is never red", async () => {
+    const g = goal({ id: "g.customers", title: "first customers", origin: s1, phase: { name: "p1", ends: "2026-10-04" }, requires: [], doneWhen: page("https://s").contains("2 customers"), evidence: "human" });
+    const i = idea({ id: "i.expand", title: "expand", origin: s1, text: "t", reason: "after first customers", revisitWhen: derived([g]), evidence: "human" });
+    expect(await status([i], "i.expand", { "https://s": { body: "0 customers" } })).toBe("green");
+    expect(await status([i], "i.expand", { "https://s": { body: "2 customers" } })).toBe("yellow");
+    const lateGoal = goal({ id: "g.late", title: "late", origin: s1, phase: { name: "p0", ends: "2026-10-02" }, requires: [], doneWhen: page("https://s").contains("never"), evidence: "human" });
+    const i2 = idea({ id: "i.late", title: "late", origin: s1, text: "t", reason: "r", revisitWhen: derived([lateGoal]), evidence: "human" });
+    const r = await compile([i2], { today, ctx: fakeCtx({ "https://s": { body: "" } }) });
+    expect(r.results.get("g.late")!.status).toBe("red");
+    expect(r.results.get("i.late")!.status).toBe("green");
+  });
+
+  it("a promise's due condition is not a dependency: a red input does not make the promise red", async () => {
+    const g = goal({ id: "g.red", title: "red goal", origin: s1, phase: { name: "p0", ends: "2026-10-02" }, requires: [], doneWhen: page("https://s").contains("never"), evidence: "human" });
+    const p = promise({ id: "p.cond", title: "p", origin: s1, owner: "owner", due: derived([g]), requires: [], doneWhen: confirm({ by: "owner" }), evidence: "human" });
+    expect(await status([p], "p.cond", { "https://s": { body: "" } })).toBe("green");
   });
 
   it("an idea is never red; it turns yellow when its revisit condition comes true", async () => {
