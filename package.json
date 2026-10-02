@@ -1,0 +1,26 @@
+{
+  "name": "alfredish",
+  "version": "0.1.0",
+  "description": "A typed, tested language for an AI agent's memory (TypeScript-embedded)",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "alfred": "./src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "tsc --noEmit && vitest run"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

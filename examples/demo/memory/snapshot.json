@@ -1,0 +1,109 @@
+{
+  "hosting.main": {
+    "kind": "account",
+    "hash": "190f50a5500efbaa",
+    "data": {
+      "agentAccess": "none",
+      "evidence": "human",
+      "id": "hosting.main",
+      "kind": "account",
+      "login": "owner@example.com",
+      "origin": "@s.2026-01-10",
+      "owner": "owner",
+      "service": "example-host",
+      "title": "Hosting account",
+      "verify": "review by owner 2026-01-10 (every 3650d)"
+    }
+  },
+  "s.2026-01-10": {
+    "kind": "session",
+    "hash": "a09541be6fffac67",
+    "data": {
+      "at": "2026-01-10",
+      "id": "s.2026-01-10",
+      "kind": "session",
+      "questions": [
+        "Is the site live?",
+        "What do we promise on it?"
+      ],
+      "title": "Set up the public site",
+      "topic": "Set up the public site"
+    }
+  },
+  "site.heading": {
+    "kind": "claim",
+    "hash": "5f61db9a71b474a3",
+    "data": {
+      "evidence": "live",
+      "id": "site.heading",
+      "kind": "claim",
+      "origin": "@s.2026-01-10",
+      "restsOn": [
+        "@site.isExampleDomain",
+        "@site.keepSimple"
+      ],
+      "text": "Example Domain",
+      "title": "The page says what it is",
+      "verify": "page https://example.com/ contains \"Example Domain\"",
+      "where": "https://example.com/"
+    }
+  },
+  "site.isExampleDomain": {
+    "kind": "fact",
+    "hash": "542f787cd21d28c8",
+    "data": {
+      "evidence": "live",
+      "id": "site.isExampleDomain",
+      "kind": "fact",
+      "origin": "@s.2026-01-10",
+      "title": "The site is the IANA example domain",
+      "value": true,
+      "verify": "page https://example.com/ contains \"Example Domain\""
+    }
+  },
+  "site.keepSimple": {
+    "kind": "decision",
+    "hash": "5506d1189f73495c",
+    "data": {
+      "evidence": "human",
+      "id": "site.keepSimple",
+      "kind": "decision",
+      "origin": "@s.2026-01-10",
+      "restsOn": [
+        "@site.live",
+        "@site.servesHtml"
+      ],
+      "review": "3650d",
+      "title": "Keep the site a single static page",
+      "verify": "review by owner 2026-01-10 (every 3650d)"
+    }
+  },
+  "site.live": {
+    "kind": "asset",
+    "hash": "155e7b5a05985b68",
+    "data": {
+      "desired": "online",
+      "evidence": "live",
+      "id": "site.live",
+      "kind": "asset",
+      "location": "https://example.com/",
+      "on": "@hosting.main",
+      "origin": "@s.2026-01-10",
+      "title": "The public site is up",
+      "verify": "http https://example.com/ → 200"
+    }
+  },
+  "site.servesHtml": {
+    "kind": "fact",
+    "hash": "553bba03cf833999",
+    "data": {
+      "evidence": "live",
+      "id": "site.servesHtml",
+      "kind": "fact",
+      "origin": "@s.2026-01-10",
+      "title": "The site serves HTML",
+      "value": "text/html",
+      "verify": "header content-type of https://example.com/ contains \"text/html\""
+    }
+  }
+}
