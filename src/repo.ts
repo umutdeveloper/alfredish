@@ -139,11 +139,12 @@ export async function checkImports(o: RepoOptions): Promise<Issue[]> {
   } catch {
     return issues;
   }
-  const IMPORT = /(?:from|import)\s*\(?\s*["']([^"']+)["']/g;
+  // Static imports/re-exports at the start of a line, and dynamic import("…") calls.
+  const IMPORT = /^\s*(?:import|export)\b[^"'\n;]*?\bfrom\s*["']([^"']+)["']|^\s*import\s*["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/gm;
   for (const f of files) {
     const text = await readFile(f, "utf8");
     for (const m of text.matchAll(IMPORT)) {
-      const spec = m[1]!;
+      const spec = (m[1] ?? m[2] ?? m[3])!;
       if (spec.startsWith("node:")) continue;
       const target = spec.startsWith(".") ? resolvePath(dirname(f), spec) : spec.startsWith("/") ? spec : undefined;
       const inside = target !== undefined && (target === root || target.startsWith(root + sep));

@@ -137,4 +137,9 @@ describe("K15 — imports stay inside the memory folder", () => {
     const issues = await checkImports({ base, memoryDir: "memory", ctx: nodeContext(base) });
     expect(issues.map((i) => [i.id, i.rule])).toEqual([["memory/bad.ts", "K15"], ["memory/bad.ts", "K15"]]);
   });
+
+  it("ignores the words 'from' and 'import' inside strings", async () => {
+    await writeFile(join(base, "memory", "text.ts"), 'export const t = "changed from \'No trackers\' to \'No cookies\'; import \'x\' later";\n');
+    expect(await checkImports({ base, memoryDir: "memory", ctx: nodeContext(base) })).toEqual([]);
+  });
 });
