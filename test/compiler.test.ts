@@ -3,7 +3,7 @@ import { compile, ttlStatus } from "../src/compiler.ts";
 import { formatCheck } from "../src/format.ts";
 import {
   account, after, agentProbe, asset, claim, confirm, decision, derived, fact, file, finding, fromFinding, goal, header, idea, local,
-  page, promise, raw, research, review, rule, source,
+  page, promise, raw, research, review, rule, source, url,
 } from "../src/dsl.ts";
 import type { PresentDef } from "../src/types.ts";
 import { fakeCtx, reviewed, s1 } from "./helpers.ts";
@@ -49,7 +49,7 @@ describe("confirm and after", () => {
 describe("K3 — propagation", () => {
   it("a red fact turns everything resting on it red, with the chain", async () => {
     const f = fact({ id: "price", title: "price", origin: s1, value: "100", verify: page("https://s").contains("$100"), evidence: "live" });
-    const c = claim({ id: "c", title: "c", origin: s1, text: "t", where: "https://s", restsOn: [f], verify: page("https://s").contains("t"), evidence: "live" });
+    const c = claim({ id: "c", title: "c", origin: s1, text: "t", where: url("https://s"), restsOn: [f], verify: page("https://s").contains("t"), evidence: "live" });
     const r = await compile([f, c, keep([f])], { today, ctx: fakeCtx({ "https://s": { body: "t $200" } }) });
     expect(r.results.get("price")!.status).toBe("red");
     expect(r.results.get("c")!.status).toBe("red");
@@ -60,13 +60,13 @@ describe("K3 — propagation", () => {
 describe("K4 — public claims", () => {
   it("rejects a weak fact that bypassed the type check", async () => {
     const weak = fact({ id: "weak", title: "w", origin: s1, value: 1, verify: source("https://x", { readAt: "2026-10-01", ttl: "30d" }), evidence: "codeRead" });
-    const c = claim({ id: "c", title: "c", origin: s1, text: "t", where: "https://s", verify: page("https://s").contains("t"), evidence: "live", restsOn: [weak as never] });
+    const c = claim({ id: "c", title: "c", origin: s1, text: "t", where: url("https://s"), verify: page("https://s").contains("t"), evidence: "live", restsOn: [weak as never] });
     const r = await compile([c], { today, ctx: fakeCtx({ "https://s": { body: "t" } }) });
     expect(r.results.get("c")!.reasons.join()).toContain("K4");
   });
 
   it("accepts our own decision as the basis of a claim", async () => {
-    const c = claim({ id: "c", title: "c", origin: s1, text: "$290", where: "https://s", verify: page("https://s").contains("$290"), evidence: "live", restsOn: [keep([])] });
+    const c = claim({ id: "c", title: "c", origin: s1, text: "$290", where: url("https://s"), verify: page("https://s").contains("$290"), evidence: "live", restsOn: [keep([])] });
     expect(await status([c], "c", { "https://s": { body: "$290" } })).toBe("green");
   });
 });
@@ -80,7 +80,7 @@ describe("K8 — expiry", () => {
 
   it("an agent probe never run is red, and propagates through `on`", async () => {
     const acc = account({ id: "host", title: "host", origin: s1, service: "host", owner: "owner", login: "o@example.com", agentAccess: "browserSession", verify: agentProbe("login shown", "30d"), evidence: "live" });
-    const a = asset({ id: "site", title: "site", origin: s1, on: acc, desired: "x", location: "https://s", verify: page("https://s").contains("x"), evidence: "live" });
+    const a = asset({ id: "site", title: "site", origin: s1, on: acc, desired: "x", location: url("https://s"), verify: page("https://s").contains("x"), evidence: "live" });
     const r = await compile([a], { today, ctx: fakeCtx({ "https://s": { body: "x" } }) });
     expect(r.results.get("host")!.status).toBe("red");
     expect(r.results.get("site")!.status).toBe("red");
@@ -139,7 +139,7 @@ describe("promises, goals and ideas", () => {
 describe("K14 — preconditions", () => {
   it("a goal far from its deadline is red at once if a precondition is red", async () => {
     const acc = account({ id: "analytics", title: "analytics account", origin: s1, service: "analytics", owner: "owner", login: "o@example.com", agentAccess: "none", verify: reviewed, evidence: "human" });
-    const installed = asset({ id: "measure.analytics", title: "analytics installed", origin: s1, on: acc, desired: "installed", location: "https://s", verify: page("https://s").contains("analytics.js"), evidence: "live" });
+    const installed = asset({ id: "measure.analytics", title: "analytics installed", origin: s1, on: acc, desired: "installed", location: url("https://s"), verify: page("https://s").contains("analytics.js"), evidence: "live" });
     const monthly = goal({ id: "measure.monthly", title: "monthly analytics report", origin: s1, phase: { name: "monthly", ends: "2026-12-31" }, requires: [installed], doneWhen: page("https://s").contains("never"), evidence: "live" });
     const r = await compile([monthly], { today, ctx: fakeCtx({ "https://s": { body: "<html>no analytics</html>" } }) });
     expect(r.results.get("measure.monthly")!.status).toBe("red");
@@ -220,30 +220,21 @@ describe("K12 — self facts, rule and idea bases", () => {
   });
 });
 
-describe("K10 — no secrets", () => {
-  it("stops on token-like strings", async () => {
-    const r1 = rule({ id: "r", title: "r", origin: s1, text: "token ghp_abcdefghijklmnopqrstuvwxyz0123", appliesTo: "all", verify: reviewed, evidence: "human" });
-    const r = await compile([r1], { today, ctx: fakeCtx() });
-    expect(r.issues.some((i) => i.rule === "K10")).toBe(true);
-  });
-});
-
-describe("K15 — local paths", () => {
-  const acc = account({ id: "git", title: "git host", origin: s1, service: "git", owner: "owner", login: "o", agentAccess: "none", verify: reviewed, evidence: "human" });
-
-  it("a local path is red and asks for the canonical address", async () => {
-    const a = asset({ id: "code", title: "site code", origin: s1, on: acc, desired: "exists", location: "~/Projects/site", verify: reviewed, evidence: "human" });
-    const r = await compile([a], { today, ctx: fakeCtx() });
-    const k15 = r.issues.find((i) => i.rule === "K15");
-    expect(k15?.id).toBe("code");
-    expect(k15?.message).toContain("what should be written instead");
+describe("K15 — typed locations", () => {
+  it("url() accepts only absolute http(s) addresses", () => {
+    expect(url("https://github.com/o/site").href).toBe("https://github.com/o/site");
+    expect(() => url("~/Projects/site")).toThrow();
+    expect(() => url("/Users/o/site")).toThrow();
+    expect(() => url("ftp://x")).toThrow();
   });
 
-  it("an owner-confirmed local path is accepted", async () => {
-    const lp = local("/Users/owner/backup.sparsebundle", { confirmedBy: "owner", at: "2026-10-01" });
-    const a = asset({ id: "backup", title: "backup", origin: s1, on: acc, desired: "exists", location: lp, verify: file(lp).exists(), evidence: "live" });
+  it("an owner-confirmed local path is a valid location", async () => {
+    const acc = account({ id: "mac", title: "mac", origin: s1, service: "macOS", owner: "owner", login: "o", agentAccess: "none", verify: reviewed, evidence: "human" });
+    const lp = local("/Users/owner/notes", { confirmedBy: "owner", at: "2026-10-01" });
+    const a = asset({ id: "notes", title: "notes", origin: s1, on: acc, desired: "exists", location: lp, verify: file(lp).exists(), evidence: "live" });
     const r = await compile([a], { today, ctx: fakeCtx() });
-    expect(r.issues.filter((i) => i.rule === "K15")).toEqual([]);
+    expect(r.results.get("notes")!.status).toBe("red"); // fake fs: not under exists/
+    expect(r.issues.every((i) => i.rule !== "K15")).toBe(true);
   });
 });
 

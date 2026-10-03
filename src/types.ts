@@ -11,6 +11,12 @@ export type Party = "owner" | "agent";
 
 // ---- locations (SPEC §3) ----
 
+/** A canonical address: an absolute http(s) URL (repo, cloud folder, tracker, site). Built with url(). */
+export interface Url {
+  kind: "url";
+  href: string;
+}
+
 /** A path the owner confirmed exists on one machine only. Anything else must be a canonical address. */
 export interface LocalPath {
   kind: "local";
@@ -18,6 +24,9 @@ export interface LocalPath {
   confirmedBy: "owner";
   at: ISODate;
 }
+
+/** Where something lives (K15). A plain string does not compile. */
+export type Location = Url | LocalPath;
 
 // ---- verification (SPEC §5) ----
 
@@ -161,7 +170,7 @@ export type ClaimDependency = FactDef<PublicEvidence> | Exclude<PresentDef, Fact
 
 export interface ClaimDef<E extends Evidence = Evidence> extends Present<"claim", E> {
   text: string;
-  where: string;
+  where: Location;
   restsOn: readonly ClaimDependency[];
 }
 
@@ -199,7 +208,7 @@ export interface AccountDef<E extends Evidence = Evidence> extends Present<"acco
 export interface AssetDef<E extends Evidence = Evidence> extends Present<"asset", E> {
   on: AccountDef;
   desired: string;
-  location: string | LocalPath;
+  location: Location;
 }
 
 export interface RuleDef<E extends Evidence = Evidence> extends Present<"rule", E> {

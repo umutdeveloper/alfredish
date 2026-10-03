@@ -20,6 +20,7 @@ import type {
   IdeaDef,
   ISODate,
   LocalPath,
+  Url,
   ProbeContext,
   ProbeResult,
   ProbeVerify,
@@ -117,6 +118,18 @@ export const confirm = (o: { by: "owner"; what?: string; at?: ISODate }): Confir
 });
 
 export const after = (date: ISODate): AfterVerify => ({ kind: "after", date });
+
+/** A canonical address (SPEC §3, K15). Only absolute http(s) URLs are accepted. */
+export const url = (href: string): Url => {
+  let u: URL | undefined;
+  try {
+    u = new URL(href);
+  } catch {
+    u = undefined;
+  }
+  if (!u || (u.protocol !== "https:" && u.protocol !== "http:")) throw new Error(`url(): not an absolute http(s) address: ${href}`);
+  return { kind: "url", href };
+};
 
 /** A path the owner confirmed exists on one machine only (SPEC §3, K15). */
 export const local = (path: string, o: { confirmedBy: "owner"; at: ISODate }): LocalPath => ({ kind: "local", path, ...o });

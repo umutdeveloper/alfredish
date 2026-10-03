@@ -130,17 +130,19 @@ describe("alfred diff", () => {
   });
 });
 
-describe("K15 — imports stay inside the memory folder", () => {
-  it("flags an import from outside the folder, accepts local ones", async () => {
-    await mkdir(join(base, "vendor"));
-    await writeFile(join(base, "memory", "ok.ts"), 'import { fact } from "../vendor/alfredish/src/index.ts";\nimport { x } from "./other.ts";\n');
-    await writeFile(join(base, "memory", "bad.ts"), 'import { fact } from "/somewhere/else/alfredish/src/index.ts";\nimport { y } from "../../outside.ts";\n');
+describe("K15 — the memory loads nothing from outside its folder", () => {
+  it("uses the TypeScript program, not text: outside files are red, words in strings are ignored", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "outside-"));
+    await writeFile(join(outside, "x.ts"), "export const x = 1;\n");
+    await writeFile(join(base, "tsconfig.json"), JSON.stringify({ compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", allowImportingTsExtensions: true, noEmit: true, types: [] }, include: ["memory"] }));
+    await writeFile(join(base, "memory", "ok.ts"), 'export const t = "changed from \'No trackers\' to \'No cookies\'; import \'x\' later";\n');
+    expect(await checkImports({ base, memoryDir: "memory", ctx: nodeContext(base) })).toEqual([]);
+    await writeFile(join(base, "memory", "bad.ts"), `import { x } from "${join(outside, "x.ts")}";\nexport const y = x;\n`);
     const issues = await checkImports({ base, memoryDir: "memory", ctx: nodeContext(base) });
-    expect(issues.map((i) => [i.id, i.rule])).toEqual([["memory/bad.ts", "K15"], ["memory/bad.ts", "K15"]]);
+    expect(issues).toEqual([expect.objectContaining({ id: join(outside, "x.ts"), rule: "K15" })]);
   });
 
-  it("ignores the words 'from' and 'import' inside strings", async () => {
-    await writeFile(join(base, "memory", "text.ts"), 'export const t = "changed from \'No trackers\' to \'No cookies\'; import \'x\' later";\n');
-    expect(await checkImports({ base, memoryDir: "memory", ctx: nodeContext(base) })).toEqual([]);
+  it("a memory without tsconfig.json cannot be inspected, so it is red", async () => {
+    expect(await checkImports({ base, memoryDir: "memory", ctx: nodeContext(base) })).toEqual([expect.objectContaining({ id: "tsconfig.json", rule: "K15" })]);
   });
 });

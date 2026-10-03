@@ -2,7 +2,7 @@
 import type { Report } from "./compiler.ts";
 import { deps, isPresent } from "./compiler.ts";
 import { describeVerify } from "./snapshot.ts";
-import type { Def, Status } from "./types.ts";
+import type { Def, Location, Status } from "./types.ts";
 
 export const MARK: Record<Status, string> = { green: "✓", yellow: "!", red: "✗", unknown: "?" };
 
@@ -25,7 +25,7 @@ export function valueOf(d: Def): string {
     case "idea":
       return d.text;
     case "asset":
-      return `${d.desired} @ ${typeof d.location === "string" ? d.location : `local:${d.location.path}`}`;
+      return `${d.desired} @ ${showLocation(d.location)}`;
     case "account":
       return `${d.service} · ${d.login} · agent access: ${d.agentAccess}`;
     case "promise":
@@ -65,3 +65,5 @@ export function formatWhy(r: Report, id: string): string {
   for (const other of r.results.values()) if (deps(other.def).includes(d)) lines.push(`  supports ← ${MARK[other.status]} ${other.def.id}`);
   return lines.join("\n");
 }
+
+export const showLocation = (l: Location): string => (l.kind === "url" ? l.href : `local:${l.path}`);

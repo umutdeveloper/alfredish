@@ -1,11 +1,16 @@
-// Checks that need the memory repository on disk: K5 (past is immutable), K6 (views are generated).
+// Checks that need the memory repository on disk: K5 (past is immutable), K6 (views are generated), K15 (self-contained).
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join, relative, resolve as resolvePath, sep } from "node:path";
+import { createRequire } from "node:module";
+import { promisify } from "node:util";
+import { dirname, join, resolve as resolvePath, sep } from "node:path";
 import type { Issue } from "./compiler.ts";
 import { diffSnapshots, snapshot, type DiffLine, type Snapshot } from "./snapshot.ts";
 import { bodyHash, parseGenerated, render, type View } from "./views.ts";
 import type { Def, ISODate, ProbeContext } from "./types.ts";
 
+const run = promisify(execFile);
 const PAST = new Set(["session", "event", "research"]);
 
 export interface RepoOptions {
@@ -120,37 +125,27 @@ export async function diff(defs: readonly Def[], range: string, o: RepoOptions):
   return diffSnapshots(from, to);
 }
 
-/** K15: a memory imports nothing outside its own folder. */
+/**
+ * K15: a memory loads nothing from outside its own folder.
+ * Structural: the TypeScript compiler lists every source file of the program built from the memory's
+ * tsconfig.json; any file outside the folder, other than installed libraries (node_modules), is red.
+ */
 export async function checkImports(o: RepoOptions): Promise<Issue[]> {
-  const issues: Issue[] = [];
   const root = resolvePath(o.base);
-  const walk = async (dir: string): Promise<string[]> => {
-    const out: string[] = [];
-    for (const e of await readdir(dir, { withFileTypes: true })) {
-      const p = join(dir, e.name);
-      if (e.isDirectory()) out.push(...(await walk(p)));
-      else if (e.name.endsWith(".ts")) out.push(p);
-    }
-    return out;
-  };
-  let files: string[] = [];
-  try {
-    files = await walk(join(root, o.memoryDir));
-  } catch {
-    return issues;
+  if (!existsSync(join(root, "tsconfig.json"))) {
+    return [{ id: "tsconfig.json", status: "red", rule: "K15", message: "no tsconfig.json: the memory's program cannot be inspected" }];
   }
-  // Static imports/re-exports at the start of a line, and dynamic import("…") calls.
-  const IMPORT = /^\s*(?:import|export)\b[^"'\n;]*?\bfrom\s*["']([^"']+)["']|^\s*import\s*["']([^"']+)["']|\bimport\(\s*["']([^"']+)["']\s*\)/gm;
-  for (const f of files) {
-    const text = await readFile(f, "utf8");
-    for (const m of text.matchAll(IMPORT)) {
-      const spec = (m[1] ?? m[2] ?? m[3])!;
-      if (spec.startsWith("node:")) continue;
-      const target = spec.startsWith(".") ? resolvePath(dirname(f), spec) : spec.startsWith("/") ? spec : undefined;
-      const inside = target !== undefined && (target === root || target.startsWith(root + sep));
-      if (!inside) {
-        issues.push({ id: relative(root, f), status: "red", rule: "K15", message: `imports "${spec}" from outside the memory folder` });
-      }
+  const local = join(root, "node_modules", "typescript", "bin", "tsc");
+  const tsc = existsSync(local) ? local : join(dirname(createRequire(import.meta.url).resolve("typescript/package.json")), "bin", "tsc");
+  const { stdout } = await run(process.execPath, [tsc, "-p", join(root, "tsconfig.json"), "--listFilesOnly"], { maxBuffer: 16 << 20 });
+  const issues: Issue[] = [];
+  for (const line of stdout.split("\n")) {
+    const f = line.trim();
+    if (!f) continue;
+    const inside = f === root || f.startsWith(root + sep);
+    const library = f.split(sep).includes("node_modules");
+    if (!inside && !library) {
+      issues.push({ id: f, status: "red", rule: "K15", message: "the memory's program loads this file from outside the memory folder" });
     }
   }
   return issues;

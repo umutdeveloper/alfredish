@@ -1,4 +1,4 @@
-<!-- alfredish: generated, do not edit — run `alfred build` · body:79b1b3f03cfa14e7 -->
+<!-- alfredish: generated, do not edit — run `alfred build` · body:5c23d4408c10f388 -->
 # NOW
 > generated 2026-10-03 · ✓ all green · 7 definitions
 
@@ -8,5 +8,5 @@
 ## Goals
 - none
 
-## Promises
+## Open promises
 - none

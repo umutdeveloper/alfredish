@@ -1,5 +1,5 @@
 // A fictional memory, to show the language. No real person's data.
-import { account, asset, claim, decision, fact, header, http, page, review, session } from "../vendor/alfredish/src/index.ts";
+import { account, asset, claim, decision, fact, header, http, page, review, session, url } from "../vendor/alfredish/src/index.ts";
 
 export const s1 = session({
   id: "s.2026-01-10", title: "Set up the public site", at: "2026-01-10",
@@ -14,7 +14,7 @@ export const host = account({
 
 export const site = asset({
   id: "site.live", title: "The public site is up", origin: s1, on: host,
-  desired: "online", location: "https://example.com/",
+  desired: "online", location: url("https://example.com/"),
   verify: http("https://example.com/").status(200), evidence: "live",
 });
 
@@ -36,6 +36,6 @@ export const keepItSimple = decision({
 
 export const heading = claim({
   id: "site.heading", title: "The page says what it is", origin: s1,
-  text: "Example Domain", where: "https://example.com/", restsOn: [isExample, keepItSimple],
+  text: "Example Domain", where: url("https://example.com/"), restsOn: [isExample, keepItSimple],
   verify: page("https://example.com/").contains("Example Domain"), evidence: "live",
 });

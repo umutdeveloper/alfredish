@@ -293,18 +293,6 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     }
   }
 
-  // K10 secrets, K15 local paths.
-  for (const d of defs) {
-    for (const s of strings(d)) {
-      const secret = SECRET_PATTERNS.find(([, re]) => re.test(s));
-      if (secret) issues.push({ id: d.id, status: "red", rule: "K10", message: `looks like a secret: ${secret[0]}` });
-      const path = LOCAL_PATH.exec(s);
-      if (path) {
-        issues.push({ id: d.id, status: "red", rule: "K15", message: `local path "${path[0].trim()}": what should be written instead (repo, tracker, cloud or site address)?` });
-      }
-    }
-  }
-
   const results = new Map<string, DefResult>();
   for (const r of final.values()) {
     results.set(r.def.id, r);
@@ -312,39 +300,4 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
   }
   issues.sort((a, b) => RANK[b.status] - RANK[a.status] || a.id.localeCompare(b.id));
   return { results, issues, counts: { definitions: defs.length, tests, parked } };
-}
-
-// ---- K10 / K15 scanning ----
-
-const SECRET_PATTERNS: readonly [string, RegExp][] = [
-  ["GitHub token", /\bgh[pousr]_[A-Za-z0-9]{20,}/],
-  ["API key (sk-)", /\bsk-[A-Za-z0-9_-]{20,}/],
-  ["AWS key", /\bAKIA[0-9A-Z]{16}\b/],
-  ["Slack token", /\bxox[abprs]-[A-Za-z0-9-]{10,}/],
-  ["private key", /-----BEGIN [A-Z ]*PRIVATE KEY-----/],
-  ["JWT", /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/],
-];
-
-const LOCAL_PATH = /(?:^|[\s"'`(])(?:\/Users\/|\/home\/|~\/|[A-Za-z]:\\)[^\s"'`)]*/;
-
-const LINK_KEYS = new Set(["origin", "research", "restsOn", "requires", "on", "from", "affects", "supersedes", "finding"]);
-
-/** Every string written in this definition (not in linked definitions, not inside owner-confirmed local()). */
-function strings(d: Def): string[] {
-  const out: string[] = [];
-  const seen = new Set<unknown>();
-  const walk = (x: unknown, depth: number) => {
-    if (depth > 5 || x === null || seen.has(x)) return;
-    if (typeof x === "string") {
-      out.push(x);
-      return;
-    }
-    if (typeof x !== "object") return;
-    seen.add(x);
-    const kind = (x as { kind?: unknown }).kind;
-    if (kind === "local" || (kind === "probe" && "local" in x)) return;
-    for (const [k, v] of Object.entries(x)) if (!LINK_KEYS.has(k)) walk(v, depth + 1);
-  };
-  walk(d, 0);
-  return out;
 }

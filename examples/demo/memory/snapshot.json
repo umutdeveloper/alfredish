@@ -32,7 +32,7 @@
   },
   "site.heading": {
     "kind": "claim",
-    "hash": "5f61db9a71b474a3",
+    "hash": "8343c9e189d201c8",
     "data": {
       "evidence": "live",
       "id": "site.heading",
@@ -45,7 +45,10 @@
       "text": "Example Domain",
       "title": "The page says what it is",
       "verify": "page https://example.com/ contains \"Example Domain\"",
-      "where": "https://example.com/"
+      "where": {
+        "href": "https://example.com/",
+        "kind": "url"
+      }
     }
   },
   "site.isExampleDomain": {
@@ -80,13 +83,16 @@
   },
   "site.live": {
     "kind": "asset",
-    "hash": "155e7b5a05985b68",
+    "hash": "d2e7f93a5982e753",
     "data": {
       "desired": "online",
       "evidence": "live",
       "id": "site.live",
       "kind": "asset",
-      "location": "https://example.com/",
+      "location": {
+        "href": "https://example.com/",
+        "kind": "url"
+      },
       "on": "@hosting.main",
       "origin": "@s.2026-01-10",
       "title": "The public site is up",
