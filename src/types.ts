@@ -41,6 +41,9 @@ export interface ProbeContext {
   run(cmd: string, args: string[], cwd?: string): Promise<{ code: number; stdout: string }>;
 }
 
+/** Results of probes that ran live, by probe description; `at` is an ISO timestamp (SPEC §9). */
+export type ProbeCache = Record<string, { status: Status; reason?: string; at: string }>;
+
 export interface ProbeVerify {
   kind: "probe";
   describe: string;

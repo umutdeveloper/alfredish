@@ -1,14 +1,16 @@
-// Checks that need the memory repository on disk: K5 (past is immutable), K6 (views are generated), K15 (self-contained).
+// Checks that need the memory repository on disk: K5 (past is immutable), K6 (views are generated), K15 (self-contained);
+// areas and the probe cache (SPEC §9).
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
-import { dirname, join, resolve as resolvePath, sep } from "node:path";
-import type { Issue } from "./compiler.ts";
+import { dirname, join, relative, resolve as resolvePath, sep } from "node:path";
+import { pathToFileURL } from "node:url";
+import { isDef, type Issue } from "./compiler.ts";
 import { diffSnapshots, snapshot, type DiffLine, type Snapshot } from "./snapshot.ts";
 import { bodyHash, parseGenerated, render, type View } from "./views.ts";
-import type { Def, ISODate, ProbeContext } from "./types.ts";
+import type { Def, ISODate, ProbeCache, ProbeContext } from "./types.ts";
 
 const run = promisify(execFile);
 const PAST = new Set(["session", "event", "research"]);
@@ -149,4 +151,49 @@ export async function checkImports(o: RepoOptions): Promise<Issue[]> {
     }
   }
   return issues;
+}
+
+// ---- areas and the probe cache (SPEC §9) ----
+
+async function tsFiles(dir: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...(await tsFiles(p)));
+    else if (e.name.endsWith(".ts")) out.push(p);
+  }
+  return out;
+}
+
+/** The definitions exported from an area's files (sub-folders included), or an error line. */
+export async function areaDefs(memoryDirAbs: string, area: string): Promise<Set<Def> | string> {
+  const dirs = (await tsFiles(memoryDirAbs).catch(() => [] as string[]))
+    .map((f) => relative(memoryDirAbs, dirname(f)).split(sep).join("/"))
+    .flatMap((d) => d.split("/").map((_, i, parts) => parts.slice(0, i + 1).join("/")))
+    .filter((d, i, all) => d !== "" && all.indexOf(d) === i);
+  const exact = dirs.filter((d) => d === area);
+  const bySegment = dirs.filter((d) => d.split("/").pop() === area);
+  const found = exact.length ? exact : bySegment;
+  if (found.length === 0) return `no area "${area}" under the memory folder`;
+  if (found.length > 1) return `area "${area}" is ambiguous: ${found.join(", ")}`;
+  const defs = new Set<Def>();
+  for (const f of await tsFiles(join(memoryDirAbs, found[0]!))) {
+    const mod = (await import(pathToFileURL(f).href)) as Record<string, unknown>;
+    for (const x of Object.values(mod)) if (isDef(x)) defs.add(x);
+  }
+  return defs;
+}
+
+const CACHE_FILE = ".alfredish-cache.json";
+
+export async function loadProbeCache(base: string): Promise<ProbeCache> {
+  try {
+    return JSON.parse((await readOrUndefined(join(base, CACHE_FILE))) ?? "{}") as ProbeCache;
+  } catch {
+    return {};
+  }
+}
+
+export async function saveProbeCache(base: string, cache: ProbeCache): Promise<void> {
+  await writeFile(join(base, CACHE_FILE), JSON.stringify(cache, null, 2) + "\n");
 }

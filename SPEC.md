@@ -139,17 +139,36 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 | Command | What it does | Output |
 |---|---|---|
 | `alfred check` | Compiles and runs all tests and repository checks | One line when all green: `✓ 41 definitions · 41 tests · 100% · 0 parked`. Otherwise only the red/yellow lines with reasons. |
+| `alfred check <area>` | The same check on the whole memory; only the area's probes (and those of everything it rests on) are forced to run live | As `alfred check` |
+| `alfred check --quick` | The same check on the whole memory; no probe is forced to run live | As `alfred check` |
 | `alfred get <id>` | Value, status and origin of one definition | Value + status + last verification + origin; a "do not use" warning when red |
 | `alfred why <id>` | Why it exists and what depends on it (up and down the chain) | Tree |
 | `alfred diff <a>[..<b>]` | **Meaning-level** difference between two dates or commits | Definition by definition, not line by line |
 | `alfred build` | Generates every view (K6) | Changed files |
 | `alfred hook` | Installs a pre-commit hook in the memory repository: `alfred check` before every commit | Hook path |
 
-`probe` results may be cached briefly (default 10 minutes). The pre-commit hook bypasses the cache.
+**Live probes.** Every probe a run needs starts at once (at most 16 at a time), and each probe runs at most once per run.
+The result of every probe that ran live is cached in `.alfredish-cache.json` at the repository root, keyed by the probe's
+description; the cache is not memory and is not committed (it belongs in `.gitignore`).
+
+The graph checks — K1-K15, propagation (K3), expiry (K8) — always cover the whole memory. The *scope* only decides which
+probes are forced to run live:
+
+- `alfred check`: every probe. The pre-commit hook runs this, so nothing is committed on cached results.
+- `alfred check <area>`: an area is a folder under the memory folder (`projects/golive`, `self`; its last segment is enough
+  when unique). The probes of the definitions exported from the area's files, and of everything they rest on (their whole
+  dependency chain), are forced.
+- `alfred check --quick`, `get`, `why`, `build`: none.
+
+A probe outside the scope still runs live unless the cache holds a result of a real look (`green` or `red`, not `unknown`)
+younger than 24 hours; that result is used as it is, red included, so it still propagates (K3). So a new, changed, unlooked
+or stale probe is always looked at, and a red result inside the scope still propagates to dependents in other areas. To see
+a fix outside the scope turn green, check its area or run the full check.
 
 ## 10. Agent rules (for every agent using Alfredish)
 
-1. At session start run `alfred check`, then read only `NOW.md`.
+1. At session start run `alfred check`, then read only `NOW.md`. During the session use `alfred check --quick` or
+   `alfred check <area>`; the full check runs again before the commit (hook).
 2. Open a `session` definition (topic + questions). Every definition written in this session has it as `origin`.
 3. Before stating a present-tense fact to the owner or publicly, take it from its source with `alfred get` and name the definition.
 4. Change the world in K11 order.

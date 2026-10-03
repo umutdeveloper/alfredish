@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// alfred check | build | hook | get <id> | why <id> | diff <a>[..<b>]   [--memory memory/index.ts]   (SPEC §9)
+// alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>]   [--memory memory/index.ts]   (SPEC §9)
 import { chmod, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { checkImports, checkPast, checkViews, diff, writeViews } from "./repo.ts";
+import { areaDefs, checkImports, checkPast, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { snapshot } from "./snapshot.ts";
-import type { ISODate } from "./types.ts";
+import type { Def, ISODate } from "./types.ts";
 import { buildViews } from "./views.ts";
 
 function today(): ISODate {
@@ -17,12 +17,14 @@ function today(): ISODate {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` as ISODate;
 }
 
-const USAGE = "usage: alfred check | build | hook | get <id> | why <id> | diff <a>[..<b>]  [--memory memory/index.ts]";
+const USAGE = "usage: alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>]  [--memory memory/index.ts]";
 
 async function main(argv: string[]): Promise<number> {
   const args = [...argv];
   const mi = args.indexOf("--memory");
   const entry = resolve(mi >= 0 ? (args.splice(mi, 2)[1] ?? "") : "memory/index.ts");
+  const qi = args.indexOf("--quick");
+  const quick = qi >= 0 && args.splice(qi, 1).length > 0;
   const [cmd, arg] = args;
   if (!cmd || !["check", "build", "hook", "get", "why", "diff"].includes(cmd) || (["get", "why", "diff"].includes(cmd) && !arg)) {
     console.error(USAGE);
@@ -48,7 +50,19 @@ async function main(argv: string[]): Promise<number> {
   const roots = Object.values(mod);
   const { defs } = collect(roots);
   const day = today();
-  const report = await compile(roots, { today: day, ctx, fileExists: ctx.fileExists });
+  // Scope (SPEC §9): a full check forces every probe live; an area forces its own chain; everything else reuses the cache.
+  let scope: ((d: Def) => boolean) | undefined;
+  if (cmd === "check" && arg) {
+    const area = await areaDefs(memoryDirAbs, arg);
+    if (typeof area === "string") {
+      console.error(area);
+      return 2;
+    }
+    scope = (d) => area.has(d);
+  } else if (quick || cmd !== "check") scope = () => false;
+  const probeCache = await loadProbeCache(base);
+  const report = await compile(roots, { today: day, ctx, fileExists: ctx.fileExists, probeCache, ...(scope && { scope }) });
+  await saveProbeCache(base, probeCache);
   const snap = snapshot(defs);
 
   switch (cmd) {

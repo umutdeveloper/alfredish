@@ -1,5 +1,5 @@
 // Alfredish compiler: evaluates every definition and applies the SPEC §7 rules that need no repository.
-import type { Def, Duration, Finding, ISODate, PresentDef, ProbeContext, Status, Verify } from "./types.ts";
+import type { Def, Duration, Finding, ISODate, PresentDef, ProbeCache, ProbeContext, ProbeVerify, Status, Verify } from "./types.ts";
 
 export interface Issue {
   id: string;
@@ -27,7 +27,17 @@ export interface CompileOptions {
   ctx: ProbeContext;
   /** Used to check that research rawData files exist. */
   fileExists?: (path: string) => Promise<boolean>;
+  /** Cached probe results; every probe that runs live is written back into it (SPEC §9). */
+  probeCache?: ProbeCache;
+  /** Definitions whose probes (and their chains') are forced live; omitted = every probe (SPEC §9). */
+  scope?: (d: Def) => boolean;
+  /** Current time in ms, for the cache's 24-hour window. */
+  now?: number;
 }
+
+type Outcome = { status: Status; reason?: string };
+/** Probe outcomes of one run: each probe runs at most once (SPEC §9). */
+type Probes = ReadonlyMap<ProbeVerify, Promise<Outcome>>;
 
 const PRESENT = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule"]);
 const KINDS = new Set([...PRESENT, "session", "event", "research"]);
@@ -110,15 +120,19 @@ export function collect(roots: readonly unknown[]): { defs: Def[]; issues: Issue
 
 // ---- evaluation ----
 
-export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext): Promise<{ status: Status; reason?: string }> {
+async function runProbe(v: ProbeVerify, ctx: ProbeContext): Promise<Outcome> {
+  try {
+    const r = await v.run(ctx);
+    return r.ok ? { status: "green" } : { status: "red", reason: `${v.describe}: ${r.detail ?? "failed"}` };
+  } catch (e) {
+    return { status: "unknown", reason: `${v.describe}: could not look (${(e as Error).message})` };
+  }
+}
+
+export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext, probes?: Probes): Promise<Outcome> {
   switch (v.kind) {
     case "probe":
-      try {
-        const r = await v.run(ctx);
-        return r.ok ? { status: "green" } : { status: "red", reason: `${v.describe}: ${r.detail ?? "failed"}` };
-      } catch (e) {
-        return { status: "unknown", reason: `${v.describe}: could not look (${(e as Error).message})` };
-      }
+      return (await probes?.get(v)) ?? runProbe(v, ctx);
     case "agentProbe":
       if (!v.last) return { status: "red", reason: `${v.describe}: never verified` };
       if (!v.last.ok) return { status: "red", reason: `${v.describe}: failed at last look (${v.last.at})` };
@@ -139,13 +153,13 @@ export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext): 
 }
 
 /** A condition "comes true" when satisfied; a derived condition when every input is satisfied (SPEC §5). */
-export async function conditionStatus(v: Verify, today: ISODate, ctx: ProbeContext, seen = new Set<Def>()): Promise<Status> {
-  if (v.kind !== "derived") return (await evalVerify(v, today, ctx)).status;
+export async function conditionStatus(v: Verify, today: ISODate, ctx: ProbeContext, probes?: Probes, seen = new Set<Def>()): Promise<Status> {
+  if (v.kind !== "derived") return (await evalVerify(v, today, ctx, probes)).status;
   let unknown = false;
   for (const input of v.from) {
     if (!isPresent(input) || seen.has(input)) continue;
     seen.add(input);
-    const s = await conditionStatus(input.verify, today, ctx, seen);
+    const s = await conditionStatus(input.verify, today, ctx, probes, seen);
     if (s === "red" || s === "yellow") return "red";
     if (s === "unknown") unknown = true;
   }
@@ -160,7 +174,7 @@ function deadline(start: ISODate, end: ISODate, today: ISODate, label: string): 
   return { status: "green" };
 }
 
-async function ownStatus(d: Def, o: CompileOptions): Promise<{ status: Status; reasons: string[] }> {
+async function ownStatus(d: Def, o: CompileOptions, probes: Probes): Promise<{ status: Status; reasons: string[] }> {
   const reasons: string[] = [];
   if (d.kind === "research") {
     let status: Status = "green";
@@ -176,11 +190,11 @@ async function ownStatus(d: Def, o: CompileOptions): Promise<{ status: Status; r
 
   if (d.kind === "idea") {
     // Never red: the revisit condition coming true is the signal.
-    const c = await conditionStatus(d.verify, o.today, o.ctx);
+    const c = await conditionStatus(d.verify, o.today, o.ctx, probes);
     if (c === "green") return { status: "yellow", reasons: [`revisit: ${d.reason}`] };
     return { status: c === "unknown" ? "unknown" : "green", reasons };
   }
-  const v = await evalVerify(d.verify, o.today, o.ctx);
+  const v = await evalVerify(d.verify, o.today, o.ctx, probes);
   switch (d.kind) {
     case "promise":
     case "goal": {
@@ -193,7 +207,7 @@ async function ownStatus(d: Def, o: CompileOptions): Promise<{ status: Status; r
         const w = deadline(d.origin.at, d.due, o.today, "due date");
         return { status: w.status, reasons: w.reason ? [w.reason] : [] };
       }
-      const c = await conditionStatus(d.due, o.today, o.ctx);
+      const c = await conditionStatus(d.due, o.today, o.ctx, probes);
       if (c === "green") return { status: "red", reasons: ["due condition came true and it is not done"] };
       return { status: c === "unknown" ? "unknown" : "green", reasons };
     }
@@ -220,15 +234,82 @@ async function ownStatus(d: Def, o: CompileOptions): Promise<{ status: Status; r
   }
 }
 
+// ---- live probes (SPEC §9) ----
+
+const MAX_PARALLEL = 16;
+const CACHE_HOURS = 24;
+
+/** The probes a definition itself needs: its verify, a condition deadline, parked revisit conditions. */
+function ownProbes(d: Def): ProbeVerify[] {
+  const vs: Verify[] = [];
+  if (isPresent(d)) vs.push(d.verify);
+  if (d.kind === "promise" && typeof d.due !== "string") vs.push(d.due);
+  if (d.kind === "fact" && d.parked) vs.push(d.parked.revisitWhen);
+  if (d.kind === "research") for (const f of Object.values(d.findings)) if (f.parked) vs.push(f.parked.revisitWhen);
+  return vs.filter((v): v is ProbeVerify => v.kind === "probe");
+}
+
+/** The scope's definitions and everything they rest on, conditions included. */
+function chainOf(scope: readonly Def[]): Set<Def> {
+  const out = new Set<Def>();
+  const visit = (d: Def) => {
+    if (out.has(d)) return;
+    out.add(d);
+    for (const x of deps(d)) visit(x);
+    if (d.kind === "idea") for (const x of verifyDeps(d.verify)) visit(x);
+    if (d.kind === "promise" && typeof d.due !== "string") for (const x of verifyDeps(d.due)) visit(x);
+  };
+  scope.forEach(visit);
+  return out;
+}
+
+/** Starts every probe the run needs at once (at most MAX_PARALLEL running); outside the scope, reuses a fresh real look. */
+function startProbes(defs: readonly Def[], o: CompileOptions): Probes {
+  const owners = new Map<ProbeVerify, Def[]>();
+  for (const d of defs) for (const v of ownProbes(d)) owners.set(v, [...(owners.get(v) ?? []), d]);
+  const forced = o.scope ? chainOf(defs.filter(o.scope)) : undefined;
+  const now = o.now ?? Date.now();
+  const queue: (() => void)[] = [];
+  let running = 0;
+  const slot = <T>(job: () => Promise<T>): Promise<T> =>
+    new Promise<T>((done, fail) => {
+      const start = () => {
+        running++;
+        job().then(done, fail).finally(() => {
+          running--;
+          queue.shift()?.();
+        });
+      };
+      if (running < MAX_PARALLEL) start();
+      else queue.push(start);
+    });
+  const probes = new Map<ProbeVerify, Promise<Outcome>>();
+  for (const [v, ds] of owners) {
+    const hit = o.probeCache?.[v.describe];
+    const fresh = hit && hit.status !== "unknown" && now - Date.parse(hit.at) < CACHE_HOURS * 3_600_000;
+    if (forced && fresh && !ds.some((d) => forced.has(d))) {
+      probes.set(v, Promise.resolve(hit.reason === undefined ? { status: hit.status } : { status: hit.status, reason: hit.reason }));
+      continue;
+    }
+    probes.set(v, slot(() => runProbe(v, o.ctx)).then((r) => {
+      if (o.probeCache) o.probeCache[v.describe] = { ...r, at: new Date(now).toISOString() };
+      return r;
+    }));
+  }
+  return probes;
+}
+
 export async function compile(roots: readonly unknown[], o: CompileOptions): Promise<Report> {
   const { defs, issues } = collect(roots);
+  const probes = startProbes(defs, o);
+  await Promise.all(probes.values());
   const own = new Map<Def, { status: Status; reasons: string[] }>();
   const doneMap = new Map<Def, boolean>();
   let tests = 0;
   for (const d of defs) {
     if (isPresent(d)) tests++;
-    own.set(d, await ownStatus(d, o));
-    if (d.kind === "goal" || d.kind === "promise") doneMap.set(d, (await evalVerify(d.verify, o.today, o.ctx)).status === "green");
+    own.set(d, await ownStatus(d, o, probes));
+    if (d.kind === "goal" || d.kind === "promise") doneMap.set(d, (await evalVerify(d.verify, o.today, o.ctx, probes)).status === "green");
   }
 
   // K3: propagation.
@@ -272,7 +353,7 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
   let parked = 0;
   const parkedCheck = async (id: string, p: { reason: string; revisitWhen: Verify }) => {
     parked++;
-    if ((await conditionStatus(p.revisitWhen, o.today, o.ctx)) === "green") issues.push({ id, status: "yellow", rule: "K12", message: `parked, revisit condition came true: ${p.reason}` });
+    if ((await conditionStatus(p.revisitWhen, o.today, o.ctx, probes)) === "green") issues.push({ id, status: "yellow", rule: "K12", message: `parked, revisit condition came true: ${p.reason}` });
   };
   for (const d of defs) {
     if (d.kind === "fact" && !used.has(d)) {
