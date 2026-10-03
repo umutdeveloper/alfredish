@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // alfred check | build | hook | get <id> | why <id> | diff <a>[..<b>]   [--memory memory/index.ts]   (SPEC §9)
 import { chmod, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext } from "./context.ts";
@@ -32,10 +32,12 @@ async function main(argv: string[]): Promise<number> {
   const memoryDirAbs = dirname(entry);
   const base = dirname(memoryDirAbs);
   if (cmd === "hook") {
-    const cli = fileURLToPath(import.meta.url);
+    // Portable (K15): paths relative to the repository root, so the hook works wherever the folder is moved.
+    const cli = relative(base, fileURLToPath(import.meta.url));
     const hook = join(base, ".git", "hooks", "pre-commit");
     const rel = join(basename(memoryDirAbs), basename(entry));
-    await writeFile(hook, `#!/bin/sh\n# installed by alfredish\nnode "${cli}" check --memory "${rel}" || { echo "alfred check is red: commit stopped"; exit 1; }\n`);
+    const typecheck = "if [ -f tsconfig.json ] && [ -x node_modules/.bin/tsc ]; then node_modules/.bin/tsc --noEmit || exit 1; fi";
+    await writeFile(hook, `#!/bin/sh\n# installed by alfredish\ncd "$(git rev-parse --show-toplevel)" || exit 1\n${typecheck}\nnode "${cli}" check --memory "${rel}" || { echo "alfred check is red: commit stopped"; exit 1; }\n`);
     await chmod(hook, 0o755);
     console.log(`installed: ${hook}`);
     return 0;
