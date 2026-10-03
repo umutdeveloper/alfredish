@@ -189,6 +189,37 @@ describe("K12 — unused knowledge", () => {
   });
 });
 
+describe("K12 — self facts, rule and idea bases", () => {
+  it("facts about the owner are used by the profile view", async () => {
+    const city = fact({ id: "self.city", title: "City", origin: s1, value: "X", verify: reviewed, evidence: "human" });
+    const r = await compile([city], { today, ctx: fakeCtx() });
+    expect(r.issues.filter((i) => i.rule === "K12")).toEqual([]);
+  });
+
+  it("a rule's restsOn counts as use and propagates red", async () => {
+    const bias = fact({ id: "f.bias", title: "bias", origin: s1, value: "x", verify: page("https://s").contains("bias"), evidence: "live" });
+    const r1 = rule({ id: "r.us", title: "say you are in the US", origin: s1, text: "t", appliesTo: "measurement", restsOn: [bias], verify: reviewed, evidence: "human" });
+    const green = await compile([r1], { today, ctx: fakeCtx({ "https://s": { body: "bias" } }) });
+    expect(green.issues).toEqual([]);
+    const red = await compile([r1], { today, ctx: fakeCtx({ "https://s": { body: "" } }) });
+    expect(red.results.get("r.us")!.status).toBe("red");
+  });
+
+  it("an idea's basedOn counts as use but never makes the idea red", async () => {
+    const f = fact({ id: "f.basis", title: "basis", origin: s1, value: "x", verify: page("https://s").contains("x"), evidence: "live" });
+    const i = idea({ id: "i.b", title: "i", origin: s1, text: "t", reason: "r", basedOn: [f], revisitWhen: after("2027-01-01"), evidence: "human" });
+    const r = await compile([i], { today, ctx: fakeCtx({ "https://s": { body: "" } }) });
+    expect(r.results.get("f.basis")!.status).toBe("red");
+    expect(r.results.get("i.b")!.status).toBe("green");
+    expect(r.issues.filter((x) => x.rule === "K12")).toEqual([]);
+  });
+
+  it("confirm names what it waits for", async () => {
+    const { describeVerify } = await import("../src/snapshot.ts");
+    expect(describeVerify(confirm({ by: "owner", what: "first sale" }))).toBe("when owner confirms: first sale");
+  });
+});
+
 describe("K10 — no secrets", () => {
   it("stops on token-like strings", async () => {
     const r1 = rule({ id: "r", title: "r", origin: s1, text: "token ghp_abcdefghijklmnopqrstuvwxyz0123", appliesTo: "all", verify: reviewed, evidence: "human" });

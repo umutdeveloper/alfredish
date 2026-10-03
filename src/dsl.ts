@@ -109,8 +109,12 @@ export const fromFinding = (f: Finding, o: { ttl: Duration }): FromFindingVerify
 
 export const review = (o: { by: "owner"; at: ISODate; every: Duration }): ReviewVerify => ({ kind: "review", ...o });
 
-export const confirm = (o: { by: "owner"; at?: ISODate }): ConfirmVerify =>
-  o.at === undefined ? { kind: "confirm", by: o.by } : { kind: "confirm", by: o.by, at: o.at };
+export const confirm = (o: { by: "owner"; what?: string; at?: ISODate }): ConfirmVerify => ({
+  kind: "confirm",
+  by: o.by,
+  ...(o.what === undefined ? {} : { what: o.what }),
+  ...(o.at === undefined ? {} : { at: o.at }),
+});
 
 export const after = (date: ISODate): AfterVerify => ({ kind: "after", date });
 

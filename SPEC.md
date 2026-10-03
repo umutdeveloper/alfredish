@@ -67,10 +67,10 @@ A past finding that is still relied on today becomes a present-tense `fact`, lin
 | `decision` | A decision | `restsOn`, `review` (re-approval interval); optional `supersedes` | a dependency is red; re-approval expired |
 | `promise` | A commitment | `owner`, `due` (a date **or** a condition), `doneWhen`, `requires` | a precondition is red (at once); or the due date passed / due condition became true and `doneWhen` is not met |
 | `goal` | A planned piece of work | `phase`, `doneWhen`, `requires` | a precondition is red (at once); or the phase ended and `doneWhen` is not met |
-| `idea` | An option deliberately parked | `text`, `reason` (why it waits), `revisitWhen` | never red; **yellow** when `revisitWhen` comes true |
+| `idea` | An option deliberately parked | `text`, `reason` (why it waits), `revisitWhen`; optional `basedOn` (what it came from — counts as use, never propagates) | never red; **yellow** when `revisitWhen` comes true |
 | `account` | An account on a service | `service`, `owner`, `login` (never a password), `agentAccess` | access verification fails; no asset uses it (K12) |
 | `asset` | Something we set up (site, repo, setting, profile, backup) | `on` (an `account`), `desired`, `location` (canonical address, §3) | the world does not match `desired` (drift, K7) |
-| `rule` | A working rule for the agent | `text`, `appliesTo` | verification fails |
+| `rule` | A working rule for the agent | `text`, `appliesTo`; optional `restsOn` (why the rule exists) | verification fails; a dependency is red |
 
 **Past-tense types:**
 
@@ -93,7 +93,7 @@ If not, it is parked explicitly with `parked: { reason, revisitWhen }` (K12).
 | `source` | Read in a primary source | `source(url, { readAt, ttl: "30d" })` | the agent; red when expired |
 | `fromFinding` | Relies on a research finding | `fromFinding(finding, { ttl: "90d" })` | the compiler; red when expired |
 | `review` | Periodic human approval | `review({ by: "owner", at, every: "60d" })` | the owner; red when expired |
-| `confirm` | One-off human confirmation that something was done | `confirm({ by: "owner" })` → not satisfied; `confirm({ by: "owner", at })` → satisfied | the owner |
+| `confirm` | One-off human confirmation that something was done | `confirm({ by: "owner", what: "first sale" })` → not satisfied; with `at` → satisfied. `what` names what is awaited | the owner |
 | `derived` | Derived from other definitions | `derived([a, b])` | the compiler; red if an input is red |
 | `after` | A date has been reached | `after("2026-12-01")` → satisfied from that day on | the compiler |
 
@@ -112,7 +112,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 
 - **K1 — Coverage:** a definition without a test does not compile. Coverage is always 100%, or there is no build. (Type level.)
 - **K2 — Links:** links are imports. A broken link is a compile error. (Type level.)
-- **K3 — Propagation:** if a definition is red, everything linked to it through `restsOn` / `requires` / `derived` / `on` / `fromFinding` is red too. The reason is shown as a chain.
+- **K3 — Propagation:** if a definition is red, everything linked to it through `restsOn` / `requires` / `derived` / `on` / `fromFinding` is red too (an idea's `basedOn` and conditions do not propagate). The reason is shown as a chain.
 - **K4 — Public claims:** a `claim` may rest on a `fact` only if that fact's evidence is `live` or `source`. Decisions, rules and other present-tense definitions (our own choices) may be claim dependencies. (Type level + compiler.)
 - **K5 — The past is immutable:** changing or deleting a `session`, `event` or `research` after its day is a compile error. Same-day corrections are allowed. (Checked against git history.)
 - **K6 — Views are generated, never hand-written:** `NOW.md`, `decisions.md`, `promises.md`, `ideas.md`, `roadmap.md`, `profile.md`, `AGENTS.md`, `sessions/*.md`, `log.md`, `library/*.md`, `library/INDEX.md`. A hand edit (body hash mismatch), a stale view, or a hand-written `.md` in `sessions/` or `library/` is a compile error.
@@ -121,7 +121,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 - **K9 — Language growth:** a new type may only be added together with its verification and its tests.
 - **K10 — No secrets:** passwords, keys and tokens never appear in definitions. The compiler scans for known key formats and stops.
 - **K11 — Definition first, then the world:** to change the world, change the definition first (it turns red), then change the world (it turns green).
-- **K12 — No unused knowledge:** every `fact`, finding and `rawData` file must support a `decision`, `claim`, `goal`, `promise`, `rule` or `asset` (directly or through a chain), or be parked with a reason. Otherwise red. A parked item's `revisitWhen` is a verification; when it comes true the item turns yellow.
+- **K12 — No unused knowledge:** every `fact`, finding and `rawData` file must support a `decision`, `claim`, `goal`, `promise`, `rule`, `asset` or `idea` (directly or through a chain), or be parked with a reason. Otherwise red. Facts about the owner (`self.*`) are used by the profile view and need no other use. A parked item's `revisitWhen` is a verification; when it comes true the item turns yellow.
 - **K13 — Birth certificate:** a definition without `origin` does not compile. `origin` links to an existing `session`. (Type level.)
 - **K14 — Preconditions:** `goal` and `promise` require `requires` (explicitly `[]` when there are none). Preconditions must be green **today**; if one is red, the goal/promise is red at once, regardless of its deadline. (Type level + compiler.)
 - **K15 — Portability:** a memory imports nothing outside its own folder (its pinned `alfredish` copy included), and refers to locations by canonical address (§3). Any local path (e.g. `/Users/…`, `~/…`, `C:\…`) anywhere in a definition is red unless wrapped in an owner-confirmed `local(...)`; the red message asks the owner for the canonical address. An import from outside the folder is a compile error.

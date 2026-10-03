@@ -68,6 +68,7 @@ export interface ReviewVerify {
 export interface ConfirmVerify {
   kind: "confirm";
   by: "owner";
+  what?: string;
   at?: ISODate;
 }
 
@@ -184,6 +185,7 @@ export interface GoalDef<E extends Evidence = Evidence> extends Present<"goal", 
 export interface IdeaDef<E extends Evidence = Evidence> extends Present<"idea", E> {
   text: string;
   reason: string;
+  basedOn?: readonly PresentDef[]; // counts as use (K12), never propagates
   // verify === revisitWhen (a Condition)
 }
 
@@ -203,6 +205,7 @@ export interface AssetDef<E extends Evidence = Evidence> extends Present<"asset"
 export interface RuleDef<E extends Evidence = Evidence> extends Present<"rule", E> {
   text: string;
   appliesTo: string;
+  restsOn?: readonly PresentDef[];
 }
 
 export type PresentDef<E extends Evidence = Evidence> =

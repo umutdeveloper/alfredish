@@ -20,7 +20,7 @@ export function describeVerify(v: Verify): string {
     case "review":
       return `review by ${v.by} ${v.at} (every ${v.every})`;
     case "confirm":
-      return v.at ? `confirmed by ${v.by} ${v.at}` : `waiting for ${v.by} to confirm`;
+      return v.at ? `confirmed by ${v.by} ${v.at}${v.what ? `: ${v.what}` : ""}` : v.what ? `when ${v.by} confirms: ${v.what}` : `waiting for ${v.by} to confirm`;
     case "after":
       return `after ${v.date}`;
     case "derived":

@@ -66,6 +66,8 @@ export function deps(d: Def): Def[] {
     case "claim":
     case "decision":
       return [...d.restsOn, ...own];
+    case "rule":
+      return [...(d.restsOn ?? []), ...own];
     case "asset":
       return [d.on, ...own];
     case "goal":
@@ -81,7 +83,7 @@ export function deps(d: Def): Def[] {
 function children(d: Def): Def[] {
   const out: Def[] = d.kind === "session" ? [] : [d.origin];
   out.push(...deps(d));
-  if (d.kind === "idea") out.push(...verifyDeps(d.verify));
+  if (d.kind === "idea") out.push(...verifyDeps(d.verify), ...(d.basedOn ?? []));
   if (d.kind === "promise" && typeof d.due !== "string") out.push(...verifyDeps(d.due));
   if (d.kind === "decision" && d.supersedes) out.push(d.supersedes);
   if (d.kind === "event") out.push(...d.affects);
@@ -265,7 +267,8 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     if (isPresent(d) && d.verify.kind === "fromFinding") usedFindings.add(d.verify.finding);
     for (const x of deps(d)) markUsed(x);
   };
-  for (const d of defs) if (ROOTS.has(d.kind)) markUsed(d);
+  for (const d of defs) if (ROOTS.has(d.kind) || (d.kind === "fact" && d.id.startsWith("self."))) markUsed(d);
+  for (const d of defs) if (d.kind === "idea") for (const b of d.basedOn ?? []) markUsed(b);
   let parked = 0;
   const parkedCheck = async (id: string, p: { reason: string; revisitWhen: Verify }) => {
     parked++;
