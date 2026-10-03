@@ -12,6 +12,8 @@ export interface DefResult {
   def: Def;
   status: Status;
   reasons: string[];
+  /** Goals and promises: whether `doneWhen` is satisfied (status says whether they are on track). */
+  done?: boolean;
 }
 
 export interface Report {
@@ -219,10 +221,12 @@ async function ownStatus(d: Def, o: CompileOptions): Promise<{ status: Status; r
 export async function compile(roots: readonly unknown[], o: CompileOptions): Promise<Report> {
   const { defs, issues } = collect(roots);
   const own = new Map<Def, { status: Status; reasons: string[] }>();
+  const doneMap = new Map<Def, boolean>();
   let tests = 0;
   for (const d of defs) {
     if (isPresent(d)) tests++;
     own.set(d, await ownStatus(d, o));
+    if (d.kind === "goal" || d.kind === "promise") doneMap.set(d, (await evalVerify(d.verify, o.today, o.ctx)).status === "green");
   }
 
   // K3: propagation.
@@ -244,7 +248,8 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
       }
     }
     resolving.delete(d);
-    const res = { def: d, status, reasons };
+    const isDone = doneMap.get(d);
+    const res: DefResult = isDone === undefined ? { def: d, status, reasons } : { def: d, status, reasons, done: isDone };
     final.set(d, res);
     return res;
   };

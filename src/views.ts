@@ -54,6 +54,7 @@ export function buildViews(defs: readonly Def[], report: Report, today: ISODate)
   const researches = of("research").sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
   const born = (d: Def) => (d.kind === "session" ? "" : ` · born ${d.origin.at} "${d.origin.topic}"`);
   const mark = (d: Def) => MARK[report.results.get(d.id)?.status ?? "unknown"];
+  const state = (d: Def) => `${mark(d)} ${report.results.get(d.id)?.done ? "done" : "open"}`;
   const det = (path: string, body: string) => views.push({ path, body, deterministic: true });
 
   // decisions.md
@@ -123,15 +124,14 @@ export function buildViews(defs: readonly Def[], report: Report, today: ISODate)
   // NOW.md (time dependent)
   {
     const reds = report.issues.filter((i) => i.status === "red").length;
-    const open = (d: Def) => report.results.get(d.id)?.status !== "green" || d.kind === "promise";
     views.push({
       path: "NOW.md",
       deterministic: false,
       body:
         `# NOW\n> generated ${today} · ${reds ? `✗ ${reds} red` : "✓ all green"} · ${report.counts.definitions} definitions\n\n` +
         `## Red / yellow\n${list(report.issues.map((i) => `- ${MARK[i.status]} ${code(i.id)} — ${i.message}`))}\n\n` +
-        `## Goals\n${list(of("goal").map((g) => `- ${mark(g)} ${g.title} (${code(g.id)}) — ${g.phase.name}, ends ${g.phase.ends}`))}\n\n` +
-        `## Promises\n${list(of("promise").filter(open).map((p) => `- ${mark(p)} ${p.title} (${code(p.id)}) — ${valueOf(p)}`))}\n`,
+        `## Goals\n${list(of("goal").filter((g) => !report.results.get(g.id)?.done).map((g) => `- ${state(g)} — ${g.title} (${code(g.id)}) — ${g.phase.name}, ends ${g.phase.ends}`))}\n\n` +
+        `## Open promises\n${list(of("promise").filter((p) => !report.results.get(p.id)?.done).map((p) => `- ${state(p)} — ${p.title} (${code(p.id)}) — ${valueOf(p)}`))}\n`,
     });
   }
   return views;

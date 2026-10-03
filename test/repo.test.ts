@@ -93,6 +93,7 @@ describe("K6 — generated views", () => {
     expect(body("ideas.md")).toContain("waits because: focus elsewhere · revisit: after 2026-12-01");
     expect(body("roadmap.md")).toContain("## Phase 0 (ends 2026-10-31)\n- Launch the site (`goal.launch`)");
     expect(body("profile.md")).toContain("- **City** — Somewhere (`self.city`)");
+    expect(body("NOW.md")).toContain("- ✓ open — Launch the site (`goal.launch`)");
   });
 });
 
