@@ -210,6 +210,52 @@ export const cmd = (describe: string, command: string, args: string[], expect?: 
     return !expect || expect.test(r.stdout) ? { ok: true } : { ok: false, detail: r.stdout.trim().slice(0, 80) };
   });
 
+/** IANA's list of the registries' RDAP servers, by top-level domain (RFC 9224). */
+export const IANA_RDAP_DNS = "https://data.iana.org/rdap/dns.json";
+
+const isRealDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(`${d}T00:00:00Z`).toISOString().startsWith(d);
+const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+const parseJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
+
+/** A domain's registration end, from its registry over RDAP (whois's structured successor), or why it is unknown. */
+async function rdapExpiry(ctx: ProbeContext, name: string): Promise<{ at: string } | { why: string }> {
+  const tld = name.toLowerCase().split(".").pop() ?? "";
+  const boot = await ctx.fetchText(IANA_RDAP_DNS);
+  const list = parseJson(boot.body);
+  const services = isObject(list) ? list["services"] : undefined;
+  let server: string | undefined;
+  for (const s of Array.isArray(services) ? services : []) {
+    if (Array.isArray(s) && Array.isArray(s[0]) && s[0].includes(tld) && Array.isArray(s[1]) && typeof s[1][0] === "string") server = s[1][0];
+  }
+  if (!server) return { why: `no RDAP server for .${tld} in IANA's list` };
+  const r = await ctx.fetchText(`${server.replace(/\/?$/, "/")}domain/${name}`);
+  if (r.status !== 200) return { why: `RDAP answered ${r.status}` };
+  const body = parseJson(r.body);
+  const events = isObject(body) ? body["events"] : undefined;
+  for (const e of Array.isArray(events) ? events : []) {
+    if (isObject(e) && e["eventAction"] === "expiration" && typeof e["eventDate"] === "string" && !Number.isNaN(Date.parse(e["eventDate"]))) return { at: e["eventDate"] };
+  }
+  return { why: "RDAP gives no expiration date" };
+}
+
+/** A domain's registration, compared as dates (never as text). */
+export const domain = (name: string) => ({
+  expiresOnOrAfter: (date: ISODate) => {
+    if (!isRealDate(date)) throw new Error(`domain(${name}).expiresOnOrAfter(): not a real date: ${date}`);
+    return probe(`domain ${name} registration ends on or after ${date} (RDAP)`, async (ctx) => {
+      const exp = await rdapExpiry(ctx, name);
+      if ("why" in exp) return { ok: false, detail: exp.why };
+      return Date.parse(exp.at) >= Date.parse(`${date}T00:00:00Z`) ? { ok: true } : { ok: false, detail: `ends ${exp.at}` };
+    });
+  },
+});
+
 export const git = (repo: string) => ({
   clean: () =>
     probe(`git ${repo} is clean`, async (ctx) => {

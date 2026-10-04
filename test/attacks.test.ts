@@ -348,7 +348,7 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
 export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipeline is healthy", origin: sToday, restsOn: [], review: "30d", verify: probe("pipeline is green", async () => ({ ok: true })), evidence: "live" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
-    expect(r.out).toMatch(/memory\/extra\.ts:\d+ — K25: imports probe — use page, http, header, file, git or cmd/);
+    expect(r.out).toMatch(/memory\/extra\.ts:\d+ — K25: imports probe — use page, http, header, file, git, domain or cmd/);
     expect(r.out).toMatch(/memory\/extra\.ts:\d+ — K25: calls probe/);
   }, TIMEOUT);
 

@@ -100,7 +100,7 @@ If not, it is parked explicitly with `parked: { reason, revisitWhen }` (K12).
 
 | Kind | What it does | Example | Run by |
 |---|---|---|---|
-| `probe` | Looks at the world automatically | `page(url).contains(text)`, `http(url).status(200)`, `header(url, name).contains(x)`, `file(local(path)).exists()`, `git(repo).clean()`, `cmd(...)` | the CLI, in seconds |
+| `probe` | Looks at the world automatically | `page(url).contains(text)`, `http(url).status(200)`, `header(url, name).contains(x)`, `file(local(path)).exists()`, `git(repo).clean()`, `domain(name).expiresOnOrAfter(date)`, `cmd(...)` | the CLI, in seconds |
 | `agentProbe` | A look that needs a logged-in browser | `agentProbe("dashboard shows the account", "30d", last)` | the agent; result + date are recorded and expire with `ttl` |
 | `source` | Read in a primary source | `source(url, { readAt, ttl: "30d" })` | the agent; red when expired |
 | `fromFinding` | Relies on a research finding | `fromFinding(finding, { ttl: "90d" })` | the compiler; red when expired |
@@ -176,7 +176,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   (`summary`, `info`, `details`, `general`, `overview`, `misc`, `other`, `data`, `notes`) is red: "split it into one key
   per property". `employerSummary` is red; `dataExposureRate` (a rate) is not.
 - **K25 — A test says everything it does:** a memory builds probes only with Alfredish's probe builders (`page`, `http`,
-  `header`, `file`, `git`, `cmd`); a direct `probe(…, fn)` in a memory file is red (checked on syntax trees, like K17).
+  `header`, `file`, `git`, `domain`, `cmd`); a direct `probe(…, fn)` in a memory file is red (checked on syntax trees, like K17).
   Every builder's description contains all its arguments (`cmd`: `<label> — runs: <command> <args> [expect /re/]`), so a
   definition's hash (K5, §14) covers what its test really does.
 - **K26 — Owner approval** (§14): a definition whose content differs from what the owner last signed is **unapproved**.
