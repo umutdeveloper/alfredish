@@ -32,6 +32,7 @@ import type {
   SessionDef,
   SourceVerify,
   Verify,
+  RetiredRef,
 } from "./types.ts";
 
 type Spec<T> = Omit<T, "kind">;
@@ -40,7 +41,7 @@ type Spec<T> = Omit<T, "kind">;
 
 export const session = (d: Spec<SessionDef>): SessionDef => ({ kind: "session", ...d });
 
-export const event = (d: Omit<Spec<EventDef>, "affects"> & { affects?: readonly Def[] }): EventDef => ({
+export const event = (d: Omit<Spec<EventDef>, "affects"> & { affects?: readonly (Def | RetiredRef)[] }): EventDef => ({
   kind: "event",
   ...d,
   affects: d.affects ?? [],
@@ -144,6 +145,9 @@ export const url = (href: string): Url => {
 export const local = (path: string, o: { confirmedBy: "owner"; at: ISODate }): LocalPath => ({ kind: "local", path, ...o });
 
 export const derived = (from: readonly Def[]): DerivedVerify => ({ kind: "derived", from });
+
+/** Names a retired definition (K20) in a past event's `affects`, so the event stays exactly as it was (K5). */
+export const retired = (id: string): RetiredRef => ({ kind: "retired", id });
 
 // ---- probe builders ----
 

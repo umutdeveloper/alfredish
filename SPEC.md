@@ -156,7 +156,9 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   with a label.
 - **K20 — Nothing disappears silently:** a present-tense definition that is in the last commit and is gone now is red,
   unless an `event` dated today lists its id in `retires` (its `text` says why). Compared with `HEAD`; once owner
-  approval exists, with the last signed record.
+  approval exists, with the last signed record. A past event that `affects` a retired definition names it with
+  `retired("<id>")`, which is recorded exactly like the live reference was, so the past is unchanged (K5); red if the id
+  still exists or no event retires it.
 - **K21 — No back-dating:** a definition that is not in the last commit must be born in a session that is not in the last
   commit either (the session being written now) or in a session dated today. Red otherwise: "born in s.X, which is
   already committed: use the current session". Compared with `HEAD`; once owner approval exists, with the last signed

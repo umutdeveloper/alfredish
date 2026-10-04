@@ -97,7 +97,7 @@ function children(d: Def): Def[] {
   if (d.kind === "idea") out.push(...verifyDeps(d.verify), ...(d.basedOn ?? []));
   if (d.kind === "promise" && typeof d.due !== "string") out.push(...verifyDeps(d.due));
   if (d.kind === "decision" && d.supersedes) out.push(d.supersedes);
-  if (d.kind === "event") out.push(...d.affects);
+  if (d.kind === "event") out.push(...d.affects.filter(isDef));
   if (d.kind === "key") out.push(...(d.distinctFrom ?? []));
   if (d.kind === "fact" && d.key) out.push(d.key);
   if (d.kind === "fact" && d.parked) out.push(...verifyDeps(d.parked.revisitWhen));
@@ -419,6 +419,18 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
       for (const p of d.rawData) {
         if (!usedRaw.has(p)) issues.push({ id: `${d.id}:${p}`, status: "red", rule: "K12", message: "raw data is the source of no finding" });
       }
+    }
+  }
+
+  // K20: a past event may name a retired definition only if it is gone and some event retired it.
+  const retiredIds = new Set(defs.flatMap((d) => (d.kind === "event" ? (d.retires ?? []) : [])));
+  const liveIds = new Set(defs.map((d) => d.id));
+  for (const d of defs) {
+    if (d.kind !== "event") continue;
+    for (const a of d.affects) {
+      if (isDef(a)) continue;
+      if (liveIds.has(a.id)) issues.push({ id: d.id, status: "red", rule: "K20", message: `retired("${a.id}") but ${a.id} still exists — refer to it directly` });
+      else if (!retiredIds.has(a.id)) issues.push({ id: d.id, status: "red", rule: "K20", message: `retired("${a.id}") but no event retires it — list it in an event's retires and say why` });
     }
   }
 

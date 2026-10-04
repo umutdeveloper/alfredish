@@ -44,10 +44,11 @@ function verifyProblems(v: unknown, field: string, onlyConditions = false): stri
   return out;
 }
 
-const linkList = (x: unknown, field: string, required: boolean): string[] => {
+const isRetired = (y: unknown) => isObj(y) && y["kind"] === "retired" && isStr(y["id"]);
+const linkList = (x: unknown, field: string, required: boolean, retiredOk = false): string[] => {
   if (x === undefined) return required ? [`${field} is missing — write [] when there are none`] : [];
   if (!Array.isArray(x)) return [`${field} is not a list — ${FIX.link}`];
-  return x.flatMap((y, i) => (isDefOf(y) ? [] : [`${field}[${i}] is not a definition — ${FIX.link}`]));
+  return x.flatMap((y, i) => (isDefOf(y) || (retiredOk && isRetired(y)) ? [] : [`${field}[${i}] is not a definition — ${FIX.link}`]));
 };
 
 const location = (x: unknown, field: string): string[] => {
@@ -81,7 +82,7 @@ export function shapeProblems(x: unknown): string[] {
     case "event":
       if (!isDate(d["at"])) out.push(`at — ${FIX.date}`);
       str("text");
-      out.push(...linkList(d["affects"], "affects", true));
+      out.push(...linkList(d["affects"], "affects", true, true));
       if (d["retires"] !== undefined && !(Array.isArray(d["retires"]) && d["retires"].every(isStr))) out.push("retires must be a list of definition ids");
       break;
     case "research": {

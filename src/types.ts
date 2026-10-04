@@ -144,6 +144,12 @@ export interface ResearchDef {
   findings: Readonly<Record<string, Finding>>;
 }
 
+/** A definition that was retired (K20), named by id from a past event; serialised exactly like the live reference. */
+export interface RetiredRef {
+  kind: "retired";
+  id: string;
+}
+
 export interface EventDef {
   kind: "event";
   id: string;
@@ -151,7 +157,8 @@ export interface EventDef {
   origin: SessionDef;
   at: ISODate;
   text: string;
-  affects: readonly Def[];
+  /** What it changed; a definition retired since is named by `retired(id)`, so the past stays as it was (K5, K20). */
+  affects: readonly (Def | RetiredRef)[];
   /** Ids of present-tense definitions removed on this event's day (K20). */
   retires?: readonly string[];
 }

@@ -31,6 +31,8 @@ export function describeVerify(v: Verify): string {
 function plain(x: unknown, depth: number): unknown {
   if (x === null || typeof x !== "object") return typeof x === "function" ? undefined : x;
   if (depth > 0 && isDef(x)) return `@${x.id}`;
+  // A retired definition named in a past event serialises like the live reference did, so the event is unchanged (K5).
+  if (depth > 0 && (x as { kind?: unknown }).kind === "retired" && typeof (x as { id?: unknown }).id === "string") return `@${(x as { id: string }).id}`;
   if (Array.isArray(x)) return x.map((v) => plain(v, depth + 1));
   if ("kind" in x && VERIFY_KINDS.has(String((x as { kind: unknown }).kind)) && !isDef(x)) {
     return describeVerify(x as Verify);
