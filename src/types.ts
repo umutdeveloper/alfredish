@@ -108,6 +108,8 @@ export interface SessionDef {
   at: ISODate;
   topic: string;
   questions: readonly string[];
+  /** Why each definition changed in this session (§14): one line per id, shown in the owner's approval list. */
+  changes?: Readonly<Record<string, string>>;
 }
 
 export interface Parked {

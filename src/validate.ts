@@ -76,6 +76,7 @@ export function shapeProblems(x: unknown): string[] {
       if (!isDate(d["at"])) out.push(`at — ${FIX.date}`);
       str("topic");
       if (!Array.isArray(d["questions"]) || !d["questions"].every(isStr)) out.push("questions must be a list of texts");
+      if (d["changes"] !== undefined && !(isObj(d["changes"]) && Object.values(d["changes"]).every(isStr))) out.push("changes must map definition ids to one-line reasons");
       break;
     case "event":
       if (!isDate(d["at"])) out.push(`at — ${FIX.date}`);

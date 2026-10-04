@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { hashTree, recordName, signFile, type ApprovalRecord } from "../src/approval.ts";
 
 const exec = promisify(execFile);
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -73,6 +74,7 @@ import { laptop } from "./infra.ts";
 // ---- running the gate ----
 
 let baseline: string;
+let approvedBaseline: string; // the same memory with a first owner approval signed by a test key (§14)
 
 async function sh(dir: string, cmd: string, args: string[]): Promise<{ code: number; out: string }> {
   try {
@@ -93,6 +95,17 @@ async function gate(dir: string, o: { build?: boolean } = {}): Promise<{ green: 
   const check = await alfred(dir, "check");
   const green = tsc.code === 0 && check.code === 0 && check.out.trimStart().startsWith("✓");
   return { green, out: tsc.out + check.out };
+}
+
+async function freshApproved(): Promise<string> {
+  const dir = join(await mkdtemp(join(tmpdir(), "alfredish-attack-")), "m");
+  await cp(approvedBaseline, dir, { recursive: true, verbatimSymlinks: true });
+  return dir;
+}
+
+/** Adds the reason for a change to today's session (§14: every change carries one). */
+async function because(dir: string, reasons: Record<string, string>): Promise<void> {
+  await edit(dir, "memory/sessions.ts", `questions: ["What changed?"] });`, `questions: ["What changed?"], changes: ${JSON.stringify(reasons)} });`);
 }
 
 async function fresh(): Promise<string> {
@@ -133,6 +146,23 @@ beforeAll(async () => {
   await git(baseline, "add", "-A");
   const c = await git(baseline, "commit", "-qm", "baseline");
   if (c.code !== 0) throw new Error(`baseline does not commit:\n${c.out}`);
+  // A copy with the owner's first approval: every current definition signed by a test key on a test anchor.
+  const keys = await mkdtemp(join(tmpdir(), "alfredish-owner-"));
+  await exec("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "owner", "-f", join(keys, "owner")]);
+  await writeFile(join(keys, "anchor.pub"), await readFile(join(keys, "owner.pub"), "utf8"));
+  process.env["ALFREDISH_ANCHOR"] = join(keys, "anchor.pub"); // inherited by every gate run
+  approvedBaseline = join(await mkdtemp(join(tmpdir(), "alfredish-approved-")), "m");
+  await cp(baseline, approvedBaseline, { recursive: true, verbatimSymlinks: true });
+  const snap = JSON.parse(await readFile(join(approvedBaseline, "memory/snapshot.json"), "utf8")) as Record<string, { kind: string; hash: string; data: Record<string, unknown> }>;
+  const record: ApprovalRecord = { n: 1, at: TODAY as ApprovalRecord["at"], base: null, alfredish: await hashTree(join(approvedBaseline, "vendor/alfredish")), approved: snap, removed: [], rejected: {}, corrections: {} };
+  await mkdir(join(approvedBaseline, "approvals"));
+  const file = join(approvedBaseline, "approvals", recordName(1));
+  await writeFile(file, JSON.stringify(record, null, 1));
+  const signed = await signFile(file, join(keys, "owner"));
+  if (!signed.ok) throw new Error(signed.out);
+  await git(approvedBaseline, "add", "-A");
+  const a = await git(approvedBaseline, "commit", "-qm", "first owner approval");
+  if (a.code !== 0) throw new Error(`approved baseline does not commit:\n${a.out}`);
 }, TIMEOUT);
 
 /** Asserts the hole is still open: the gate ran and called the mistake green. */
@@ -311,49 +341,49 @@ export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipel
 
   // -- known holes: the gate still says green --
 
-  it("HOLE: a local path in free text ($HOME form)", async () => {
+  it("HOLE (without owner approval): a local path in free text ($HOME form)", async () => {
     const dir = await fresh();
     await edit(dir, "memory/decisions.ts", "worked in the work folder", "worked in $HOME/work");
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a local path in free text (relative form)", async () => {
+  it("HOLE (without owner approval): a local path in free text (relative form)", async () => {
     const dir = await fresh();
     await edit(dir, "memory/decisions.ts", "worked in the work folder", "worked in ../../work");
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: the agent marks a local path as confirmed by the owner", async () => {
+  it("HOLE (without owner approval): the agent marks a local path as confirmed by the owner", async () => {
     const dir = await fresh();
     await addDefs(dir, `export const forged = asset({ id: "work.forged", title: "Some folder", origin: sToday, on: laptop, desired: "exists", location: local("/tmp/anything", { confirmedBy: "owner", at: "${TODAY}" }), verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: the agent re-approves a decision on the owner's behalf", async () => {
+  it("HOLE (without owner approval): the agent re-approves a decision on the owner's behalf", async () => {
     const dir = await fresh();
     await edit(dir, "memory/decisions.ts", `review: "30d", verify: review({ by: "owner", at: "${OLD}"`, `review: "30d", verify: review({ by: "owner", at: "${TODAY}"`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a command that always passes (`true`) — visible in its description (K25), seen only by owner approval", async () => {
+  it("HOLE (without owner approval): a command that always passes (`true`) — visible in its description (K25), seen only by owner approval", async () => {
     const dir = await fresh();
     await addDefs(dir, `export const fakeCmd = decision({ id: "work.backups", title: "Backups run every night", origin: sToday, restsOn: [], review: "30d", verify: cmd("a backup exists", "true", []), evidence: "live" });\n`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a rule is quietly weakened (budget 1,000 -> 100,000 EUR)", async () => {
+  it("HOLE (without owner approval): a rule is quietly weakened (budget 1,000 -> 100,000 EUR)", async () => {
     const dir = await fresh();
     await edit(dir, "memory/rules.ts", "Spend at most 1,000 EUR", "Spend at most 100,000 EUR");
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a promise's due date is quietly postponed", async () => {
+  it("HOLE (without owner approval): a promise's due date is quietly postponed", async () => {
     const dir = await fresh();
     await edit(dir, "memory/promises.ts", `due: "${DUE}"`, `due: "2099-01-01"`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a contradicting second fact passes when the agent falsely declares its key distinct (only owner approval sees it)", async () => {
+  it("HOLE (without owner approval): a contradicting second fact passes when the agent falsely declares its key distinct (only owner approval sees it)", async () => {
     const dir = await fresh();
     await addDefs(dir, `import { titleKey } from "./decisions.ts";
 export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday, distinctFrom: [titleKey] });
@@ -362,19 +392,19 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: memory text written in another language than agreed", async () => {
+  it("HOLE (without owner approval): memory text written in another language than agreed", async () => {
     const dir = await fresh();
     await edit(dir, "memory/decisions.ts", "Tickets are worked in the work folder", "Ticket'lar iş klasöründe çalışılır");
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a password written into memory text", async () => {
+  it("HOLE (without owner approval): a password written into memory text", async () => {
     const dir = await fresh();
     await edit(dir, "memory/decisions.ts", "Tickets are worked in the work folder", "Tickets are worked in the work folder; server password hunter2");
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: the memory's own copy of Alfredish is edited to hide red results", async () => {
+  it("HOLE (without owner approval): the memory's own copy of Alfredish is edited to hide red results", async () => {
     const dir = await fresh();
     await edit(dir, "vendor/alfredish/src/compiler.ts", "  issues.sort(", "  issues.length = 0;\n  issues.sort(");
     await addDefs(dir, `export const down = fact({ id: "work.down", key: key({ subject: "server", name: "status", valueType: "text", describe: "whether the server answers", origin: sToday }), title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });
@@ -382,7 +412,7 @@ export const rests = decision({ id: "work.restsOnDown", title: "Keep the server"
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: the past is rewritten and committed past the hook (--no-verify); later checks see nothing", async () => {
+  it("HOLE (without owner approval): the past is rewritten and committed past the hook (--no-verify); later checks see nothing", async () => {
     const dir = await fresh();
     await edit(dir, "memory/events.ts", "The memory was started.", "The memory was started much earlier.");
     await alfred(dir, "build");
@@ -392,5 +422,91 @@ export const rests = decision({ id: "work.restsOnDown", title: "Keep the server"
     // …but not one that skips it, and K5 then compares against the rewritten HEAD.
     expect((await git(dir, "commit", "-q", "--no-verify", "-m", "rewrite")).code).toBe(0);
     stillOpen(await gate(dir));
+  }, TIMEOUT);
+});
+
+// With a first owner approval signed (§14), the same mistakes can no longer pass as approved.
+describe.concurrent("attacks against a memory with owner approval (K26-K28)", () => {
+  it("control: the untouched approved memory is green", async () => {
+    const r = await gate(await freshApproved());
+    expect(r.out).toMatch(/^\s*✓/);
+  }, TIMEOUT);
+
+  it("the agent renewing a review itself is red: an unsigned review counts as not given (K26)", async () => {
+    const dir = await freshApproved();
+    await edit(dir, "memory/decisions.ts", `review: "30d", verify: review({ by: "owner", at: "${OLD}"`, `review: "30d", verify: review({ by: "owner", at: "${TODAY}"`);
+    await because(dir, { "work.focus": "renewed" });
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain(`work.focus — K26: "review by owner ${TODAY} (every 30d)" is not signed by the owner`);
+  }, TIMEOUT);
+
+  it("a rule weakened without a reason is red; with a reason it is unapproved — visible, and a commit still goes through", async () => {
+    const dir = await freshApproved();
+    await edit(dir, "memory/rules.ts", "Spend at most 1,000 EUR", "Spend at most 100,000 EUR");
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("rule.budget — K26: changed since approval 1 without a reason");
+    await because(dir, { "rule.budget": "raised the budget" });
+    const y = await gate(dir);
+    expect(y.green).toBe(false);
+    expect(y.out).toContain("! rule.budget — K26: unapproved: raised the budget — the owner sees it in alfred approve");
+    await git(dir, "add", "-A");
+    expect((await git(dir, "commit", "-qm", "work in progress")).code).toBe(0); // unapproved never stops a commit
+  }, TIMEOUT);
+
+  it("a postponed promise is unapproved, with its reason", async () => {
+    const dir = await freshApproved();
+    await edit(dir, "memory/promises.ts", `due: "${DUE}"`, `due: "2099-01-01"`);
+    await because(dir, { "promise.renewDomain": "later" });
+    expect((await gate(dir)).out).toContain("promise.renewDomain — K26: unapproved: later");
+  }, TIMEOUT);
+
+  it("a local path the agent marks as owner-confirmed is red until the owner signs it (K26)", async () => {
+    const dir = await freshApproved();
+    await addDefs(dir, `export const forged = asset({ id: "work.forged", title: "Some folder", origin: sToday, on: laptop, desired: "exists", location: local("/tmp/anything", { confirmedBy: "owner", at: "${TODAY}" }), verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
+    await because(dir, { "work.forged": "a folder" });
+    expect((await gate(dir)).out).toContain("work.forged — K26: a local() path the owner has not signed");
+  }, TIMEOUT);
+
+  it("a false distinctFrom and a `true` test are unapproved: the owner sees both before they count", async () => {
+    const dir = await freshApproved();
+    await addDefs(dir, `import { titleKey } from "./decisions.ts";
+export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday, distinctFrom: [titleKey] });
+export const jobTitle2 = fact({ id: "work.position", key: k2, title: "Official job title", origin: sToday, value: "Principal Engineer", verify: cmd("always", "true", []), evidence: "live" });
+export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: cmd("always", "true", []), evidence: "live" });\n`);
+    await because(dir, { "key:work.position": "a new property", "work.position": "new title", "work.restsOnBoth": "plan" });
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("! key:work.position — K26: unapproved: a new property");
+    expect(r.out).toContain("! work.position — K26: unapproved: new title");
+  }, TIMEOUT);
+
+  it("an edited copy of Alfredish is red until the owner approves it (K28)", async () => {
+    const dir = await freshApproved();
+    await edit(dir, "vendor/alfredish/src/compiler.ts", "  issues.sort(", "  issues.length = 0;\n  issues.sort(");
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("vendor/alfredish — K28: the copy of Alfredish changed since the owner's last approval");
+  }, TIMEOUT);
+
+  it("the past rewritten and committed past the hook is still caught: the signed state is the reference (K28, K5)", async () => {
+    const dir = await freshApproved();
+    await edit(dir, "memory/events.ts", "The memory was started.", "The memory was started much earlier.");
+    await alfred(dir, "build");
+    await git(dir, "add", "-A");
+    expect((await git(dir, "commit", "-q", "--no-verify", "-m", "rewrite")).code).toBe(0);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("K5: past changed");
+  }, TIMEOUT);
+
+  it("an approval record edited after signing is red (K27)", async () => {
+    const dir = await freshApproved();
+    const f = join(dir, "approvals/0001.json");
+    await writeFile(f, (await readFile(f, "utf8")).replace('"n": 1', '"n": 1 '));
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("approvals/0001.json — K27: bad signature");
   }, TIMEOUT);
 });

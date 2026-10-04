@@ -8,6 +8,8 @@ import { nodeContext } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
 import { areaDefs, checkHistory, checkImports, checkNewKeys, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, keyText, rank } from "./similarity.ts";
+import { DEFAULT_ANCHOR, loadApprovals } from "./approval.ts";
+import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
 import { snapshot } from "./snapshot.ts";
 import type { Def, ISODate, KeyDef } from "./types.ts";
 import { buildViews } from "./views.ts";
@@ -75,14 +77,22 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case "check": {
+      // §14: the owner's signed approvals, if this memory has them (K27), are the reference (K28) and mark what is
+      // unapproved (K26).
+      const approvals = await loadApprovals(base, process.env["ALFREDISH_ANCHOR"] ?? DEFAULT_ANCHOR);
+      const signed = approvals.state;
+      const reference = signed && signed.records > 0 ? referenceSnapshot(signed) : undefined;
       report.issues.push(
+        ...approvals.issues,
+        ...(signed ? checkApproval(snap, defs, signed) : []),
+        ...(signed ? await checkAlfredishCopy(base, signed) : []),
         ...(await checkViews(buildViews(defs, report, day), snap, repo)),
-        ...(await checkPast(snap, day, repo)),
+        ...(await checkPast(snap, day, repo, reference)),
         ...(await checkImports(repo)),
         ...(await checkTypeEscapes(repo)),
-        ...(await checkHistory(snap, day, repo)),
+        ...(await checkHistory(snap, day, repo, reference)),
         ...(await checkReachable(memoryDirAbs, new Set<unknown>([...defs, ...invalid.keys()]), base)),
-        ...(await checkNewKeys(defs, repo)),
+        ...(await checkNewKeys(defs, repo, undefined, reference)),
       );
       console.log(formatCheck(report));
       return report.issues.some((i) => i.status === "red") ? 1 : 0;

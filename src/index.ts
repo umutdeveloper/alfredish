@@ -10,4 +10,6 @@ export { buildViews, parseGenerated, render, bodyHash } from "./views.ts";
 export type { View } from "./views.ts";
 export { checkViews, checkPast, checkHistory, checkImports, checkReachable, checkTypeEscapes, writeViews, diff } from "./repo.ts";
 export { typeEscapes } from "./escapes.ts";
+export * from "./approval.ts";
+export { checkApproval, checkAlfredishCopy, referenceSnapshot } from "./owner.ts";
 export { shapeProblems } from "./validate.ts";

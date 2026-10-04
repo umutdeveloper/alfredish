@@ -79,8 +79,8 @@ async function snapshotAt(ref: string, o: RepoOptions): Promise<Snapshot | undef
 }
 
 /** K5: a session/event/research whose day has passed may not change or disappear (compared with HEAD). */
-export async function checkPast(snap: Snapshot, today: ISODate, o: RepoOptions): Promise<Issue[]> {
-  const head = await snapshotAt("HEAD", o);
+export async function checkPast(snap: Snapshot, today: ISODate, o: RepoOptions, reference?: Snapshot): Promise<Issue[]> {
+  const head = reference ?? (await snapshotAt("HEAD", o)); // K28: the signed state when there is one
   if (!head) return [];
   const issues: Issue[] = [];
   for (const [id, old] of Object.entries(head)) {
@@ -102,8 +102,8 @@ const refId = (x: unknown) => (typeof x === "string" && x.startsWith("@") ? x.sl
  * K20: a present-tense definition in HEAD that is gone must be listed in `retires` of an event dated today.
  * K21: a definition new since HEAD must be born in a session that is new since HEAD or dated today.
  */
-export async function checkHistory(snap: Snapshot, today: ISODate, o: RepoOptions): Promise<Issue[]> {
-  const head = await snapshotAt("HEAD", o);
+export async function checkHistory(snap: Snapshot, today: ISODate, o: RepoOptions, reference?: Snapshot): Promise<Issue[]> {
+  const head = reference ?? (await snapshotAt("HEAD", o)); // K28
   if (!head) return [];
   const issues: Issue[] = [];
   const retired = new Set<string>();
@@ -129,8 +129,8 @@ export async function checkHistory(snap: Snapshot, today: ISODate, o: RepoOption
  * K23: a key new since the last commit must decide, in distinctFrom, every key of the same subject that is at least
  * KEY_SIMILARITY_THRESHOLD similar. If the model cannot be used, every new key is red: it never passes unseen.
  */
-export async function checkNewKeys(defs: readonly Def[], o: RepoOptions, embed: () => Promise<Embed> = embedder): Promise<Issue[]> {
-  const head = (await snapshotAt("HEAD", o)) ?? {};
+export async function checkNewKeys(defs: readonly Def[], o: RepoOptions, embed: () => Promise<Embed> = embedder, reference?: Snapshot): Promise<Issue[]> {
+  const head = reference ?? (await snapshotAt("HEAD", o)) ?? {}; // K28
   const keys = defs.filter((d): d is KeyDef => d.kind === "key");
   const fresh = keys.filter((k) => !head[k.id]);
   if (!fresh.length) return [];
