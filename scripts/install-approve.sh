@@ -27,6 +27,8 @@ cp -R "$HERE/src" "$HERE/package.json" "$HERE/node_modules" "$LIB/"
 # Node itself is copied too: the system's node may live in a folder the owner (and so an agent) can write.
 cp "$(command -v node)" "$LIB/node"
 git -C "$HERE" rev-parse --short HEAD > "$LIB/PINNED" 2>/dev/null || true
+# Where it came from: a new vendor/alfredish copy in a memory is compared with this source before the owner approves it.
+echo "$HERE" > "$LIB/SOURCE"
 
 # 3. The anchor: the list of the owner's public keys.
 printf '# the owner of the memories on this machine (alfredish §14)\n%s\n' "$KEY" > "$ANCHOR_DIR/owner.pub"

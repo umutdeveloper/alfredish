@@ -342,7 +342,10 @@ record with its reason, in two groups: **your calls** first (decisions, rules, p
 **machine-checked** lines (facts, assets, accounts and claims verified by a built-in probe other than `cmd`, each shown
 with its test). Per item: **approve**, **correct** (a note; the agent's next version comes back, shown as the
 difference from its first try), **reject** (it must return to its approved content; red until it does), or **skip**
-(stays unapproved). The owner sees everything they sign in full, never shortened: every field of a new or removed
+(stays unapproved). In a terminal it is one screen per change — the reason first, buttons chosen with the arrow keys,
+a summary before the signature; elsewhere plain questions. A new copy of Alfredish (K28) is shown with the commit it
+names, whether its files are exactly that commit's files in the Alfredish source the tool was installed from, and the
+commits since the last approved copy (a record keeps the approved commit as `pinned`). The owner sees everything they sign in full, never shortened: every field of a new or removed
 definition, and for a changed one each changed field (a text as its unchanged context, the removed words and the added
 words). One signature signs the round. It signs only with a key on the anchor list; with none on this
 machine, nothing is recorded.

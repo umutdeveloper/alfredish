@@ -1,10 +1,12 @@
 // SPEC §14 `alfred approve`: the owner's approval round. The core (what changed, the record a set of decisions makes)
 // is plain functions so it can be tested with throwaway keys; the terminal dialogue is a thin layer on top.
-import { readFile, rm, writeFile, mkdir } from "node:fs/promises";
-import { createInterface } from "node:readline";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createInterface, emitKeypressEvents } from "node:readline";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { APPROVALS_DIR, hashTree, readAnchor, recordName, sha256, signFile, type ApprovalRecord, type ApprovedState } from "./approval.ts";
+import { fileURLToPath } from "node:url";
+import { entriesFor, newScreen, render, step, VENDOR_KEY, type Key } from "./approve-screen.ts";
+import { APPROVALS_DIR, hashTree, readAnchor, recordName, run, sha256, signFile, type ApprovalRecord, type ApprovedState } from "./approval.ts";
 import { diffSnapshots, type Snapshot } from "./snapshot.ts";
 import type { ISODate } from "./types.ts";
 
@@ -129,12 +131,13 @@ export function changesSince(state: ApprovedState | undefined, snap: Snapshot, m
 export type Decision = { kind: "approve" } | { kind: "correct"; note: string } | { kind: "reject"; note?: string } | { kind: "skip" };
 
 /** The record a round of decisions makes. Removals can only be approved (or skipped). */
-export function buildRecord(state: ApprovedState | undefined, snap: Snapshot, changes: readonly Change[], decisions: ReadonlyMap<string, Decision>, at: ISODate, alfredish: { now: string | null; approve: boolean }, prevText?: string): ApprovalRecord {
+export function buildRecord(state: ApprovedState | undefined, snap: Snapshot, changes: readonly Change[], decisions: ReadonlyMap<string, Decision>, at: ISODate, alfredish: { now: string | null; approve: boolean; pinned?: string | null }, prevText?: string): ApprovalRecord {
   const rec: ApprovalRecord = {
     n: (state?.records ?? 0) + 1,
     at,
     base: prevText === undefined ? null : sha256(prevText),
     alfredish: alfredish.approve ? alfredish.now : (state?.last?.alfredish ?? null),
+    pinned: alfredish.approve ? (alfredish.pinned ?? null) : (state?.last?.pinned ?? null),
     approved: {},
     removed: [],
     rejected: {},
@@ -184,15 +187,114 @@ export async function writeSigned(base: string, rec: ApprovalRecord, anchorPath:
 
 const SYMBOL: Record<Op, string> = { "+": "new", "~": "changed", "-": "removed" };
 
-/** The terminal dialogue (run by the owner). */
+/**
+ * What the owner needs to judge a new copy of Alfredish: which commit it claims to be, whether its files are exactly
+ * that commit's files in the Alfredish source this tool was installed from, and the commits since the last approved one.
+ */
+const COPY = {
+  last: (p: string) => ` (approved last time: ${p})`, cannot: "? the copy cannot be compared with Alfredish's source on this machine",
+  same: (p: string) => `✓ the copy is exactly the files of Alfredish ${p}`, differs: (p: string) => `✗ the copy is NOT the files of Alfredish ${p}: do not approve it`,
+  since: "changes since then:", latest: "latest changes (the last approved commit is not known):",
+} as const;
+
+export async function alfredishCopyInfo(base: string, previous: string | null | undefined, source?: string): Promise<{ lines: string[]; pinned: string | null }> {
+  const w = COPY;
+  const vendor = join(base, "vendor", "alfredish");
+  const pinned = (await readFile(join(vendor, "PINNED"), "utf8").catch(() => "")).trim() || null;
+  const lines = [`Alfredish ${pinned ?? "?"}${previous ? w.last(previous) : ""}`];
+  if (!source || !pinned || !/^[0-9a-f]{4,40}$/.test(pinned)) {
+    lines.push(w.cannot);
+    return { lines, pinned };
+  }
+  const git = (...a: string[]) => run("git", ["-C", source, ...a]);
+  const tmp = await mkdtemp(join(tmpdir(), "alfredish-copy-"));
+  try {
+    const tar = join(tmp, "copy.tar");
+    const archived = await git("archive", "-o", tar, pinned, "--", "src", "SPEC.md", "package.json", "models");
+    const tree = join(tmp, "tree");
+    await mkdir(tree);
+    const extracted = archived.code === 0 && (await run("tar", ["-xf", tar, "-C", tree])).code === 0;
+    if (extracted) await writeFile(join(tree, "PINNED"), await readFile(join(vendor, "PINNED")));
+    const same = extracted && (await hashTree(tree)) === (await hashTree(vendor));
+    lines.push(same ? w.same(pinned) : w.differs(pinned));
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+  const log = await git("log", "--format=%h %s", "-n", previous ? "30" : "5", previous ? `${previous}..${pinned}` : pinned);
+  if (log.code === 0 && log.out.trim()) lines.push("", previous ? w.since : w.latest, ...log.out.trim().split("\n").map((l) => `  · ${l}`));
+  return { lines, pinned };
+}
+
+/** Where this copy of Alfredish was installed from (written by scripts/install-approve.sh). */
+async function installedFrom(): Promise<string | undefined> {
+  const text = await readFile(fileURLToPath(new URL("../SOURCE", import.meta.url)), "utf8").catch(() => "");
+  return text.trim() || undefined;
+}
+
+/** The terminal dialogue (run by the owner): the arrow-key screen in a terminal, plain questions otherwise. */
 export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate }): Promise<number> {
-  const changes = changesSince(o.state, o.snap, process.stdout.isTTY && !process.env["NO_COLOR"] ? COLOURS : PLAIN);
+  const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const changes = changesSince(o.state, o.snap, tty && !process.env["NO_COLOR"] ? COLOURS : PLAIN);
   const vendor = await hashTree(join(o.base, "vendor", "alfredish"));
   const vendorChanged = vendor !== null && vendor !== (o.state?.last?.alfredish ?? null);
   if (!changes.length && !vendorChanged) {
     console.log("Nothing changed since your last approval.");
     return 0;
   }
+  const copy = vendorChanged ? await alfredishCopyInfo(o.base, o.state?.last?.pinned, await installedFrom()) : undefined;
+  const firstRound = !o.state?.records;
+  const answers = tty ? await askOnScreen(changes, copy?.lines, firstRound) : await askByLines(changes, copy?.lines, firstRound);
+  if (!answers) {
+    console.log("Quit: nothing recorded.");
+    return 0;
+  }
+  const { decisions, approveVendor } = answers;
+  const counted = [...decisions.values()].filter((d) => d.kind !== "skip").length;
+  if (!counted && !approveVendor) {
+    console.log("Nothing decided — nothing recorded.");
+    return 0;
+  }
+  const prev = o.state?.records ? await readFile(join(o.base, APPROVALS_DIR, recordName(o.state.records)), "utf8") : undefined;
+  const rec = buildRecord(o.state, o.snap, changes, decisions, o.today, { now: vendor, approve: approveVendor, pinned: copy?.pinned ?? null }, prev);
+  console.log("Signing — give your fingerprint only if the prompt names your terminal, not another program.");
+  const r = await writeSigned(o.base, rec, o.anchorPath, o.agentSocket);
+  console.log(r.message);
+  return r.ok ? 0 : 1;
+}
+
+type Answers = { decisions: Map<string, Decision>; approveVendor: boolean } | undefined;
+
+/** The arrow-key screen. Undefined when the owner quits. */
+async function askOnScreen(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean): Promise<Answers> {
+  const screen = newScreen(entriesFor(changes, { firstRound, ...(vendorLines && { vendor: vendorLines }) }));
+  const out = process.stdout;
+  const draw = () => out.write(`\x1b[H\x1b[2J${render(screen)}`);
+  emitKeypressEvents(process.stdin);
+  process.stdin.setRawMode(true);
+  out.write("\x1b[?1049h\x1b[?25l");
+  draw();
+  await new Promise<void>((done) => {
+    const onKey = (_: string, key: Key | undefined) => {
+      step(screen, key ?? {});
+      if (screen.mode === "signed" || screen.mode === "quit") {
+        process.stdin.off("keypress", onKey);
+        done();
+      } else draw();
+    };
+    process.stdin.on("keypress", onKey);
+  });
+  process.stdin.setRawMode(false);
+  process.stdin.pause();
+  out.write("\x1b[?25h\x1b[?1049l");
+  if (screen.mode === "quit") return undefined;
+  const decisions = new Map(screen.decisions);
+  const approveVendor = decisions.get(VENDOR_KEY)?.kind === "approve";
+  decisions.delete(VENDOR_KEY);
+  return { decisions, approveVendor };
+}
+
+/** Plain questions, one per line, for input that is not a terminal. */
+async function askByLines(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean): Promise<Answers> {
   // Lines are queued as they arrive, so answers typed ahead (or pasted at once) are never lost.
   const rl = createInterface({ input: process.stdin, terminal: false });
   const queued: string[] = [];
@@ -214,16 +316,16 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
   };
   const decisions = new Map<string, Decision>();
   let approveVendor = false;
-  console.log(`${changes.length} change${changes.length === 1 ? "" : "s"} since approval ${o.state?.records ?? 0}.\n`);
-  if (vendorChanged) {
-    console.log("! The memory's copy of Alfredish changed (vendor/alfredish). Approve it only if you updated Alfredish yourself.");
+  console.log(`${changes.length} change${changes.length === 1 ? "" : "s"} to decide.\n`);
+  if (vendorLines) {
+    console.log(`! The memory's copy of Alfredish changed (vendor/alfredish):\n${vendorLines.map((l) => `    ${l}`).join("\n")}`);
     approveVendor = (await ask("  approve the new Alfredish copy? [y/N] ")).toLowerCase() === "y";
   }
-  if (!o.state?.records) {
+  if (firstRound) {
     console.log(`This is your first approval: ${changes.length} definitions make up the memory today.`);
     if ((await ask("  approve the memory as it is as your starting point? [y/N] ")).toLowerCase() === "y") {
       for (const c of changes) decisions.set(c.id, { kind: "approve" });
-      approveVendor = vendor !== null;
+      approveVendor = vendorLines !== undefined;
     }
   }
   const pending = changes.filter((c) => !decisions.has(c.id));
@@ -252,15 +354,5 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
     }
   }
   rl.close();
-  const counted = [...decisions.values()].filter((d) => d.kind !== "skip").length;
-  if (!counted && !approveVendor) {
-    console.log("\nNothing decided — nothing recorded.");
-    return 0;
-  }
-  const prev = o.state?.records ? await readFile(join(o.base, APPROVALS_DIR, recordName(o.state.records)), "utf8") : undefined;
-  const rec = buildRecord(o.state, o.snap, changes, decisions, o.today, { now: vendor, approve: approveVendor }, prev);
-  console.log("\nSigning — give your fingerprint only if the prompt names your terminal, not another program.");
-  const r = await writeSigned(o.base, rec, o.anchorPath, o.agentSocket);
-  console.log(r.message);
-  return r.ok ? 0 : 1;
+  return { decisions, approveVendor };
 }

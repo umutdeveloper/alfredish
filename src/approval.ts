@@ -28,6 +28,8 @@ export interface ApprovalRecord {
   base: string | null;
   /** sha256 of the memory's vendor/alfredish tree at approval time (K28). */
   alfredish: string | null;
+  /** The Alfredish commit that copy was taken from, as the owner approved it (shown in the next round). */
+  pinned?: string | null;
   approved: Record<string, ApprovedItem>;
   removed: string[];
   rejected: Record<string, { hash: string; note?: string }>;
@@ -52,7 +54,7 @@ export async function readAnchor(path: string): Promise<string[]> {
   return text.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
 }
 
-function run(cmd: string, args: string[], input?: string, env?: NodeJS.ProcessEnv): Promise<{ code: number; out: string }> {
+export function run(cmd: string, args: string[], input?: string, env?: NodeJS.ProcessEnv): Promise<{ code: number; out: string }> {
   return new Promise((done) => {
     const p = spawn(cmd, args, { env: env ?? process.env });
     let out = "";
