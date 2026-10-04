@@ -1,6 +1,7 @@
 // SPEC §14 owner approval: signed approval records (K27) and the approved state they add up to (K26, K28).
 // Verifying needs only the owner's public keys (the anchor) and ssh-keygen; no agent ever signs.
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,6 +12,8 @@ import type { ISODate } from "./types.ts";
 export const DEFAULT_ANCHOR = "/etc/alfredish/owner.pub";
 export const NAMESPACE = "alfredish";
 export const APPROVALS_DIR = "approvals";
+/** The system ssh-keygen when there is one (protected by the OS), never one an agent could put first in PATH. */
+export const SSH_KEYGEN = existsSync("/usr/bin/ssh-keygen") ? "/usr/bin/ssh-keygen" : "ssh-keygen";
 
 export interface ApprovedItem {
   kind: string;
@@ -69,7 +72,7 @@ export async function verifySignature(data: string, sig: string, anchorKeys: rea
     const signers = anchorKeys.map((k) => `owner ${k.split(/\s+/).slice(0, 2).join(" ")}`).join("\n") + "\n";
     await writeFile(join(dir, "allowed_signers"), signers);
     await writeFile(join(dir, "data.sig"), sig);
-    const r = await run("ssh-keygen", ["-Y", "verify", "-f", join(dir, "allowed_signers"), "-I", "owner", "-n", NAMESPACE, "-s", join(dir, "data.sig")], data);
+    const r = await run(SSH_KEYGEN, ["-Y", "verify", "-f", join(dir, "allowed_signers"), "-I", "owner", "-n", NAMESPACE, "-s", join(dir, "data.sig")], data);
     return r.code === 0;
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -82,7 +85,7 @@ export async function verifySignature(data: string, sig: string, anchorKeys: rea
  */
 export async function signFile(file: string, keyFile: string, agentSocket?: string): Promise<{ ok: boolean; out: string }> {
   const env = agentSocket ? { ...process.env, SSH_AUTH_SOCK: agentSocket } : process.env;
-  const r = await run("ssh-keygen", ["-Y", "sign", "-f", keyFile, "-n", NAMESPACE, file], undefined, env);
+  const r = await run(SSH_KEYGEN, ["-Y", "sign", "-f", keyFile, "-n", NAMESPACE, file], undefined, env);
   return { ok: r.code === 0, out: r.out };
 }
 

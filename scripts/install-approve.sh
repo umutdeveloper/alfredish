@@ -24,6 +24,8 @@ fi
 rm -rf "$LIB"
 mkdir -p "$LIB" "$PREFIX/bin" "$ANCHOR_DIR"
 cp -R "$HERE/src" "$HERE/package.json" "$HERE/node_modules" "$LIB/"
+# Node itself is copied too: the system's node may live in a folder the owner (and so an agent) can write.
+cp "$(command -v node)" "$LIB/node"
 git -C "$HERE" rev-parse --short HEAD > "$LIB/PINNED" 2>/dev/null || true
 
 # 3. The anchor: the list of the owner's public keys.
@@ -33,7 +35,7 @@ printf '# the owner of the memories on this machine (alfredish §14)\n%s\n' "$KE
 cat > "$PREFIX/bin/alfred-approve" <<WRAP
 #!/bin/sh
 # alfred-approve: the owner's approval round for the memory in the current folder (alfredish §14).
-ALFREDISH_ANCHOR="$ANCHOR_DIR/owner.pub" exec node "$LIB/src/cli.ts" approve --agent "\${ALFREDISH_AGENT_SOCKET:-$SOCKET}" "\$@"
+PATH=/usr/bin:/bin ALFREDISH_ANCHOR="$ANCHOR_DIR/owner.pub" exec "$LIB/node" "$LIB/src/cli.ts" approve --agent "\${ALFREDISH_AGENT_SOCKET:-$SOCKET}" "\$@"
 WRAP
 chmod 755 "$PREFIX/bin/alfred-approve"
 
