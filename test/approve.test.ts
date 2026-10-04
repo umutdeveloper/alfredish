@@ -49,21 +49,25 @@ describe("alfred approve — what changed (§14)", () => {
   it("shows the owner everything they sign, never shortened: the changed words of a long text, every field of a new definition", () => {
     const old = "At session end, before the commit: re-read the whole conversation and list every decision, promise, fact, idea or change not yet recorded as a definition; show Umut that one list, record what he confirms, then build, check and make the session's commit.";
     const now = old.replace("record what he confirms, then build, check and make the session's commit.", "record what he confirms with its reason in the session's changes, then build and check; ask Umut to run alfred-approve in his own Terminal, check again, and only then make the session's commit.");
-    expect(textChange(old, now)).toEqual([
-      "…that one list, record what he",
-      "− confirms, then build, check and",
-      "+ confirms with its reason in the session's changes, then build and check; ask Umut to run alfred-approve in his own Terminal, check again, and only then",
-      "make the session's commit.",
-    ]);
+    const marked = textChange(old, now);
+    expect(marked).toContain("record what he [-confirms,-] {+confirms with its reason in the session's changes,+} then");
+    // Read either way, the marked text gives back exactly the old and the new text.
+    const back = (t: string, keep: "old" | "new") => t.replace(keep === "old" ? / ?\{\+.*?\+\}/g : / ?\[-.*?-\]/g, "").replace(keep === "old" ? /\[-(.*?)-\]/g : /\{\+(.*?)\+\}/g, "$1").trim();
+    for (const [x, y] of [[old, now], ["a b c", "a x c"], ["one two", "zero one two three"], ["same", "same"], ["drop all of this", "new"]] as const) {
+      expect(back(textChange(x, y), "old")).toBe(x);
+      expect(back(textChange(x, y), "new")).toBe(y);
+    }
     const longVerify = "x".repeat(300);
     const c = changesSince(state({ r: item("rule", "h1", { title: "R", text: old, verify: "a" }) }), {
       r: item("rule", "h2", { title: "R", text: now, verify: longVerify }),
       n: item("rule", "h3", { id: "n", title: "New", text: old, appliesTo: "memory" }),
     });
     const changed = c.find((x) => x.id === "r")!.shown.join("\n");
-    expect(changed).toContain("+ confirms with its reason in the session's changes");
-    expect(changed).toContain(`  + ${longVerify}`);
+    expect(changed).toContain("{+confirms with its reason in the session's changes,+}");
+    expect(changed).toContain(`verify: [-a-] {+${longVerify}+}`);
     expect(c.find((x) => x.id === "n")!.shown).toEqual(["title: New", `text: ${old}`, "appliesTo: memory"]);
+    const s = changesSince(undefined, { s: item("session", "h", { id: "s", kind: "session", questions: ["Why?", "How?"], changes: { r: "because" } }) });
+    expect(s[0]!.shown).toEqual(["questions:", "  - Why?", "  - How?", "changes:", "  r: because"]);
   });
 });
 

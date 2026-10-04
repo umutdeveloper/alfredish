@@ -26,45 +26,65 @@ export interface Change {
   shown: string[];
 }
 
-const CONTEXT_WORDS = 6;
 const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
 
-/** One changed text: the unchanged words around it as context, then the removed and the added words in full. */
-export function textChange(before: string, after: string): string[] {
+/** How removed and added words are marked: colours in a terminal, git's word-diff marks elsewhere. */
+export interface Marks {
+  gone: (s: string) => string;
+  added: (s: string) => string;
+}
+export const PLAIN: Marks = { gone: (s) => `[-${s}-]`, added: (s) => `{+${s}+}` };
+export const COLOURS: Marks = { gone: (s) => `\x1b[31;9m${s}\x1b[0m`, added: (s) => `\x1b[32m${s}\x1b[0m` };
+
+/**
+ * A changed text, whole, with the removed words and the added words marked where they are — so it reads as one
+ * text, not as fragments. Words are matched by longest common subsequence.
+ */
+export function textChange(before: string, after: string, marks: Marks = PLAIN): string {
   const a = before.split(" ");
   const b = after.split(" ");
-  let p = 0;
-  while (p < a.length && p < b.length && a[p] === b[p]) p++;
-  let s = 0;
-  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
-  const head = a.slice(Math.max(0, p - CONTEXT_WORDS), p).join(" ");
-  const tail = a.slice(a.length - s, a.length - s + CONTEXT_WORDS).join(" ");
+  const n = a.length, m = b.length;
+  const L: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i]![j] = a[i] === b[j] ? L[i + 1]![j + 1]! + 1 : Math.max(L[i + 1]![j]!, L[i]![j + 1]!);
   const out: string[] = [];
-  if (head) out.push(`${p > CONTEXT_WORDS ? "…" : ""}${head}`);
-  const gone = a.slice(p, a.length - s).join(" ");
-  const added = b.slice(p, b.length - s).join(" ");
-  if (gone) out.push(`− ${gone}`);
-  if (added) out.push(`+ ${added}`);
-  if (tail) out.push(`${tail}${s > CONTEXT_WORDS ? "…" : ""}`);
-  return out;
+  let gone: string[] = [], added: string[] = [];
+  const flush = () => {
+    if (gone.length) out.push(marks.gone(gone.join(" ")));
+    if (added.length) out.push(marks.added(added.join(" ")));
+    gone = [];
+    added = [];
+  };
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) {
+      flush();
+      out.push(a[i]!);
+      i++;
+      j++;
+    } else if (j < m && (i === n || L[i]![j + 1]! >= L[i + 1]![j]!)) added.push(b[j++]!);
+    else gone.push(a[i++]!);
+  }
+  flush();
+  return out.join(" ");
 }
 
-function shownFor(op: Op, was: Record<string, unknown> | undefined, now: Record<string, unknown> | undefined): string[] {
+function shownFor(op: Op, was: Record<string, unknown> | undefined, now: Record<string, unknown> | undefined, marks: Marks): string[] {
   if (op !== "~") {
     const data = (op === "+" ? now : was) ?? {};
-    return Object.entries(data).filter(([k]) => k !== "id").map(([k, v]) => `${k}: ${show(v)}`);
+    // Lists and maps of text read as lines; the id and kind are already in the heading.
+    return Object.entries(data).filter(([k]) => k !== "id" && k !== "kind").flatMap(([k, v]) => {
+      if (Array.isArray(v) && v.every((x) => typeof x === "string")) return [`${k}:`, ...v.map((x) => `  - ${x}`)];
+      if (typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).every((x) => typeof x === "string")) return [`${k}:`, ...Object.entries(v).map(([a, b]) => `  ${a}: ${String(b)}`)];
+      return [`${k}: ${show(v)}`];
+    });
   }
   const out: string[] = [];
   for (const k of [...new Set([...Object.keys(was ?? {}), ...Object.keys(now ?? {})])].sort()) {
     const x = was?.[k];
     const y = now?.[k];
     if (JSON.stringify(x) === JSON.stringify(y)) continue;
-    out.push(`${k}:`);
-    if (typeof x === "string" && typeof y === "string") out.push(...textChange(x, y).map((l) => `  ${l}`));
-    else {
-      if (x !== undefined) out.push(`  − ${show(x)}`);
-      if (y !== undefined) out.push(`  + ${show(y)}`);
-    }
+    if (typeof x === "string" && typeof y === "string") out.push(`${k}: ${textChange(x, y, marks)}`);
+    else out.push(`${k}: ${[x !== undefined ? marks.gone(show(x)) : "", y !== undefined ? marks.added(show(y)) : ""].filter(Boolean).join(" ")}`);
   }
   return out;
 }
@@ -89,13 +109,13 @@ function reasons(snap: Snapshot): Map<string, string> {
 }
 
 /** Every difference between the memory now and what the owner last signed, owner's calls first. */
-export function changesSince(state: ApprovedState | undefined, snap: Snapshot): Change[] {
+export function changesSince(state: ApprovedState | undefined, snap: Snapshot, marks: Marks = PLAIN): Change[] {
   const approved: Snapshot = {};
   for (const [id, it] of state?.items ?? []) approved[id] = { kind: it.kind, hash: it.hash, data: it.data };
   const why = reasons(snap);
   const out: Change[] = diffSnapshots(approved, snap).map((d) => {
     const data = snap[d.id]?.data;
-    const c: Change = { id: d.id, op: d.op, kind: d.kind, group: groupOf(d.op, d.kind, data), detail: d.detail, shown: shownFor(d.op, approved[d.id]?.data, data) };
+    const c: Change = { id: d.id, op: d.op, kind: d.kind, group: groupOf(d.op, d.kind, data), detail: d.detail, shown: shownFor(d.op, approved[d.id]?.data, data, marks) };
     if (data && c.group === "machine") c.test = String(data["verify"] ?? "");
     const w = why.get(d.id);
     if (w) c.why = w;
@@ -166,7 +186,7 @@ const SYMBOL: Record<Op, string> = { "+": "new", "~": "changed", "-": "removed" 
 
 /** The terminal dialogue (run by the owner). */
 export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate }): Promise<number> {
-  const changes = changesSince(o.state, o.snap);
+  const changes = changesSince(o.state, o.snap, process.stdout.isTTY && !process.env["NO_COLOR"] ? COLOURS : PLAIN);
   const vendor = await hashTree(join(o.base, "vendor", "alfredish"));
   const vendorChanged = vendor !== null && vendor !== (o.state?.last?.alfredish ?? null);
   if (!changes.length && !vendorChanged) {
@@ -213,7 +233,7 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
   for (const c of owner) {
     if (c.note) console.log(`  (your note last time: ${c.note})`);
     const why = c.why ?? (c.kind === "session" ? "the session record: its topic, questions and the reasons above" : "(no reason given)");
-    console.log(`${c.op} ${c.id}  [${c.kind}, ${SYMBOL[c.op]}]\n${c.shown.map((l) => `    ${l}`).join("\n")}\n    why: ${why}`);
+    console.log(`\n${c.op} ${c.id}  [${c.kind}, ${SYMBOL[c.op]}]\n    why: ${why}\n${c.shown.map((l) => `    ${l}`).join("\n")}`);
     const a = (await ask(c.op === "-" ? "  [a]pprove removal, [s]kip: " : "  [a]pprove, [c]orrect, [r]eject, [s]kip: ")).toLowerCase();
     if (a === "a") decisions.set(c.id, { kind: "approve" });
     else if (a === "c" && c.op !== "-") decisions.set(c.id, { kind: "correct", note: await ask("    note for the agent: ") });
@@ -224,7 +244,7 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
   }
   if (machine.length) {
     console.log("\n— Machine-checked (each shown with its test) —");
-    for (const c of machine) console.log(`${c.op} ${c.id}\n${c.shown.map((l) => `    ${l}`).join("\n")}\n    test: ${c.test}${c.why ? `\n    why: ${c.why}` : ""}`);
+    for (const c of machine) console.log(`\n${c.op} ${c.id}${c.why ? `\n    why: ${c.why}` : ""}\n${c.shown.map((l) => `    ${l}`).join("\n")}\n    test: ${c.test}`);
     const all = (await ask(`  approve all ${machine.length}? [y]es, [o]ne by one, [n]o: `)).toLowerCase();
     for (const c of machine) {
       if (all === "y") decisions.set(c.id, { kind: "approve" });
