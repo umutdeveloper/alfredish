@@ -7,7 +7,7 @@ import { compile } from "../src/compiler.ts";
 import { areaDefs } from "../src/repo.ts";
 import { cmd, decision, fact, review } from "../src/dsl.ts";
 import type { PresentDef, ProbeCache, ProbeContext } from "../src/types.ts";
-import { s1 } from "./helpers.ts";
+import { s1, tk } from "./helpers.ts";
 
 const today = "2026-10-03" as const;
 const now = Date.parse("2026-10-03T12:00:00Z");
@@ -37,7 +37,7 @@ function countingCtx(fail: string[] = [], delayMs = 0) {
 }
 
 const probed = (id: string, command: string) =>
-  fact({ id, title: id, origin: s1, value: "x", verify: cmd(`${command} works`, command, []), evidence: "live" });
+  fact({ id, key: tk(id, s1), title: id, origin: s1, value: "x", verify: cmd(`${command} works`, command, []), evidence: "live" });
 const keep = (id: string, restsOn: readonly PresentDef[]) =>
   decision({ id, title: id, origin: s1, restsOn, review: "60d", verify: review({ by: "owner", at: "2026-10-01", every: "60d" }), evidence: "human" });
 
@@ -59,8 +59,8 @@ describe("live probes run in parallel, once each (SPEC §9)", () => {
   it("runs a probe once even when two definitions or two passes need it", async () => {
     const c = countingCtx();
     const check = cmd("site works", "site", []);
-    const f1 = fact({ id: "f1", title: "f1", origin: s1, value: "x", verify: check, evidence: "live" });
-    const f2 = fact({ id: "f2", title: "f2", origin: s1, value: "x", verify: check, evidence: "live" });
+    const f1 = fact({ id: "f1", key: tk("f1", s1), title: "f1", origin: s1, value: "x", verify: check, evidence: "live" });
+    const f2 = fact({ id: "f2", key: tk("f2", s1), title: "f2", origin: s1, value: "x", verify: check, evidence: "live" });
     await compile([f1, f2, keep("d", [f1, f2])], { today, ctx: c.ctx });
     expect(c.runs["site"]).toBe(1);
   });
@@ -106,7 +106,7 @@ describe("probe cache and scope (SPEC §9)", () => {
   it("inside the scope, and along everything the scope rests on, probes run live", async () => {
     const c = countingCtx();
     const base = probed("self.github", "github");
-    const site = fact({ id: "site", title: "site", origin: s1, value: "x", verify: cmd("site works", "site", []), evidence: "live" });
+    const site = fact({ id: "site", key: tk("site", s1), title: "site", origin: s1, value: "x", verify: cmd("site works", "site", []), evidence: "live" });
     const offer = keep("offer", [site, base]);
     const other = probed("other", "other");
     const cache: ProbeCache = { "github works": green(hoursAgo(1)), "site works": green(hoursAgo(1)), "other works": green(hoursAgo(1)) };

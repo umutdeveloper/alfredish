@@ -65,7 +65,7 @@ export const started = event({ id: "event.started", title: "Memory started", ori
 };
 
 // The same header every definition file above starts with, for files an attack adds.
-const EXTRA_HEADER = `import { claim, cmd, decision, fact, local, probe, review, asset, url } from "./lang.ts";
+const EXTRA_HEADER = `import { claim, cmd, decision, fact, key, local, probe, review, asset, url } from "./lang.ts";
 import { sOld, sToday } from "./sessions.ts";
 import { laptop } from "./infra.ts";
 `;
@@ -213,7 +213,7 @@ describe.concurrent("attacks: mistakes the gate must refuse", () => {
 
   it("an owner-reviewed fact labelled 'live' behind a public claim is caught (K19)", async () => {
     const dir = await fresh();
-    await addDefs(dir, `export const lie = fact({ id: "site.customers", title: "Happy customers", origin: sToday, value: 100, verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "live" });
+    await addDefs(dir, `export const lie = fact({ id: "site.customers", key: key({ subject: "siteCustomers", name: "count", valueType: "number", describe: "number of happy customers", origin: sToday }), title: "Happy customers", origin: sToday, value: 100, verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "live" });
 export const lieClaim = claim({ id: "site.claim.customers", title: "Site: 100 happy customers", origin: sToday, text: "100 happy customers", where: url("https://example.com/"), restsOn: [lie], verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
@@ -236,9 +236,9 @@ export const lieClaim = claim({ id: "site.claim.customers", title: "Site: 100 ha
 
   it("a definition in a file the index does not export is caught (K18)", async () => {
     const dir = await fresh();
-    await writeFile(join(dir, "memory/hidden.ts"), `import { cmd, fact } from "./lang.ts";
+    await writeFile(join(dir, "memory/hidden.ts"), `import { cmd, fact, key } from "./lang.ts";
 import { sToday } from "./sessions.ts";
-export const hidden = fact({ id: "work.serverDown", title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });\n`);
+export const hidden = fact({ id: "work.serverDown", key: key({ subject: "server", name: "status", valueType: "text", describe: "whether the server answers", origin: sToday }), title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toContain("work.serverDown — K18: defined in memory/hidden.ts but not reachable from the index");
@@ -268,8 +268,7 @@ export const title2 = fact({ id: "work.title2", title: "Job title", origin: sTod
 
   it("a second value under a renamed key is caught (K23); a real new property passes once decided", async () => {
     const dir = await fresh();
-    await addDefs(dir, `import { key } from "./lang.ts";
-import { titleKey } from "./decisions.ts";
+    await addDefs(dir, `import { titleKey } from "./decisions.ts";
 export const roleKey = key({ subject: "work", name: "officialRole", valueType: "text", describe: "official job title held", origin: sToday });
 export const title2 = fact({ id: "work.title2", title: "Job title", origin: sToday, value: "Principal Engineer", key: roleKey, verify: review({ by: "owner", at: "${TODAY}", every: "180d" }), evidence: "human" });
 export const usesTitle2 = decision({ id: "work.usesTitle2", title: "Uses the role", origin: sToday, restsOn: [title2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
@@ -287,6 +286,17 @@ export const usesTitle2 = decision({ id: "work.usesTitle2", title: "Uses the rol
     expect(list.out).toContain("key:work.jobTitle — text · official job title");
     const like = await alfred(dir, "keys", "work", "--like", "the role written on the contract");
     expect(like.out).toMatch(/^0\.\d\d  key:work\.jobTitle — official job title/m);
+  }, TIMEOUT);
+
+  it("a contradicting second fact cannot hide: its new key is close to the existing one (K23)", async () => {
+    const dir = await fresh();
+    await addDefs(dir, `import { titleKey } from "./decisions.ts";
+export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday });
+export const jobTitle2 = fact({ id: "work.position", key: k2, title: "Official job title", origin: sToday, value: "Principal Engineer", verify: review({ by: "owner", at: "${TODAY}", every: "180d" }), evidence: "human" });
+export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toMatch(/key:work\.position — K23: new key is close to: key:work\.jobTitle/);
   }, TIMEOUT);
 
   // -- known holes: the gate still says green --
@@ -339,12 +349,12 @@ export const usesTitle2 = decision({ id: "work.usesTitle2", title: "Uses the rol
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a second fact contradicts an existing one and a decision rests on both", async () => {
+  it("HOLE: a contradicting second fact passes when the agent falsely declares its key distinct (only owner approval sees it)", async () => {
     const dir = await fresh();
-    await edit(dir, "memory/decisions.ts", "restsOn: [jobTitle]", "restsOn: [jobTitle, jobTitle2]");
-    await edit(dir, "memory/decisions.ts", `import { sOld } from "./sessions.ts";`, `import { sOld, sToday } from "./sessions.ts";`);
-    // Declared before the decision that uses it, so the type checker has nothing to say.
-    await edit(dir, "memory/decisions.ts", "export const focus =", `export const jobTitle2 = fact({ id: "work.jobTitle", title: "Official job title", origin: sToday, value: "Principal Engineer", verify: review({ by: "owner", at: "${OLD}", every: "180d" }), evidence: "human" });\nexport const focus =`);
+    await addDefs(dir, `import { titleKey } from "./decisions.ts";
+export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday, distinctFrom: [titleKey] });
+export const jobTitle2 = fact({ id: "work.position", key: k2, title: "Official job title", origin: sToday, value: "Principal Engineer", verify: review({ by: "owner", at: "${TODAY}", every: "180d" }), evidence: "human" });
+export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
@@ -363,7 +373,7 @@ export const usesTitle2 = decision({ id: "work.usesTitle2", title: "Uses the rol
   it("HOLE: the memory's own copy of Alfredish is edited to hide red results", async () => {
     const dir = await fresh();
     await edit(dir, "vendor/alfredish/src/compiler.ts", "  issues.sort(", "  issues.length = 0;\n  issues.sort(");
-    await addDefs(dir, `export const down = fact({ id: "work.down", title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });
+    await addDefs(dir, `export const down = fact({ id: "work.down", key: key({ subject: "server", name: "status", valueType: "text", describe: "whether the server answers", origin: sToday }), title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });
 export const rests = decision({ id: "work.restsOnDown", title: "Keep the server", origin: sToday, restsOn: [down], review: "30d", verify: review({ by: "owner", at: "${TODAY}", every: "30d" }), evidence: "human" });\n`);
     stillOpen(await gate(dir));
   }, TIMEOUT);

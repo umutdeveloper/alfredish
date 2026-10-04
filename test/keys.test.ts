@@ -26,7 +26,8 @@ describe("key — shape (K16)", () => {
     expect(shapeProblems(budgetCap)).toEqual([]);
     expect(shapeProblems({ ...budgetCap, subject: "Ada" }).join()).toContain("subject must be a lowerCamelCase name");
     expect(shapeProblems({ ...budgetCap, valueType: "money" }).join()).toContain("valueType must be");
-    expect(shapeProblems({ ...fact({ id: "f", title: "t", origin: s1, value: 1, verify: ok, evidence: "human" }), key: "ada.budgetCap" }).join()).toContain("key is not a key");
+    expect(shapeProblems({ ...fact({ id: "f", key: budgetCap, title: "t", origin: s1, value: 1, verify: ok, evidence: "human" }), key: "ada.budgetCap" }).join()).toContain("key is not a key");
+    expect(shapeProblems({ ...fact({ id: "f", key: budgetCap, title: "t", origin: s1, value: 1, verify: ok, evidence: "human" }), key: undefined }).join()).toContain("key is missing — give the fact the key of the property it states");
   });
 });
 

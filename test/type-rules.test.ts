@@ -2,13 +2,13 @@
 // if any line below stops being a type error, @ts-expect-error itself fails the build.
 import { describe, it, expect } from "vitest";
 import { account, after, asset, claim, decision, fact, goal, idea, page, promise, review, source, url } from "../src/dsl.ts";
-import { s1 } from "./helpers.ts";
+import { s1, tk } from "./helpers.ts";
 
 const researchFact = fact({
-  id: "f.research", title: "research fact", origin: s1, value: 1,
+  id: "f.research", key: tk("f.research", s1), title: "research fact", origin: s1, value: 1,
   verify: source("https://x", { readAt: "2026-10-01", ttl: "30d" }), evidence: "research",
 });
-const liveFact = fact({ id: "f.live", title: "live fact", origin: s1, value: 1, verify: page("https://x").contains("1"), evidence: "live" });
+const liveFact = fact({ id: "f.live", key: tk("f.live", s1), title: "live fact", origin: s1, value: 1, verify: page("https://x").contains("1"), evidence: "live" });
 const ourPrice = decision({
   id: "d.price", title: "our price", origin: s1, restsOn: [researchFact], review: "60d",
   verify: review({ by: "owner", at: "2026-10-01", every: "60d" }), evidence: "human",
@@ -17,11 +17,11 @@ const ourPrice = decision({
 export function typeRules() {
   // K1: no verify, no build.
   // @ts-expect-error verify is required
-  fact({ id: "a", title: "a", origin: s1, value: 1, evidence: "live" });
+  fact({ id: "a", key: tk("a", s1), title: "a", origin: s1, value: 1, evidence: "live" });
 
   // K13: no origin, no build.
   // @ts-expect-error origin is required
-  fact({ id: "b", title: "b", value: 1, verify: page("https://x").contains("1"), evidence: "live" });
+  fact({ id: "b", key: tk("b", s1), title: "b", value: 1, verify: page("https://x").contains("1"), evidence: "live" });
 
   // K4: a claim cannot rest on a research-level fact…
   claim({

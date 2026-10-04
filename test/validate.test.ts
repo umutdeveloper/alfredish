@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { collect, compile } from "../src/compiler.ts";
 import { asset, account, decision, fact, local, promise, review, rule, session, url } from "../src/dsl.ts";
 import { shapeProblems } from "../src/validate.ts";
-import { fakeCtx } from "./helpers.ts";
+import { fakeCtx, tk } from "./helpers.ts";
 
 const s1 = session({ id: "s.2026-10-01", title: "t", at: "2026-10-01", topic: "t", questions: ["?"] });
 const ok = review({ by: "owner", at: "2026-10-01", every: "90d" });
@@ -26,13 +26,13 @@ describe("K16 — type rules also hold at run time", () => {
     ["a string location", { ...asset({ id: "x", title: "t", origin: s1, on: laptop, desired: "d", location: url("https://e.com"), verify: ok, evidence: "human" }), location: "/Users/x" }, "location is not url() or local()"],
     ["a link that is not a definition", { ...decision({ id: "d", title: "t", origin: s1, restsOn: [], review: "90d", verify: ok, evidence: "human" }), restsOn: [undefined] }, "restsOn[0] is not a definition"],
     ["a promise without requires", { ...promise({ id: "p", title: "t", origin: s1, owner: "owner", due: "2026-12-01", requires: [], doneWhen: ok, evidence: "human" }), requires: undefined }, "requires is missing"],
-    ["a fact without a value", { ...fact({ id: "f", title: "t", origin: s1, value: 1, verify: ok, evidence: "human" }), value: undefined }, "value is missing"],
+    ["a fact without a value", { ...fact({ id: "f", key: tk("f", s1), title: "t", origin: s1, value: 1, verify: ok, evidence: "human" }), value: undefined }, "value is missing"],
   ])("%s is named, with the fix", (_, def, message) => {
     expect(shapeProblems(def).join(" | ")).toContain(message);
   });
 
   it("a malformed definition is reported, never crashes the compiler, and turns what rests on it red", async () => {
-    const broken = bad({ ...fact({ id: "f.broken", title: "t", origin: s1, value: 1, verify: ok, evidence: "human" }), verify: undefined });
+    const broken = bad({ ...fact({ id: "f.broken", key: tk("f.broken", s1), title: "t", origin: s1, value: 1, verify: ok, evidence: "human" }), verify: undefined });
     const resting = decision({ id: "d.rests", title: "t", origin: s1, restsOn: [broken], review: "90d", verify: ok, evidence: "human" });
     const { defs, invalid } = collect([broken, resting]);
     expect(invalid.has(broken)).toBe(true);
@@ -49,11 +49,11 @@ describe("K19 — evidence cannot claim more than the test proves", () => {
     const { evidenceCeiling } = await import("../src/compiler.ts");
     const { derived, fromFinding, finding, research, page } = await import("../src/dsl.ts");
     const r = research({ id: "r", title: "t", origin: s1, at: "2026-10-01", question: "?", readWhen: "w", findings: { a: finding({ text: "x" }) } });
-    const seen = fact({ id: "f.seen", title: "t", origin: s1, value: 1, verify: page("https://e.com").contains("x"), evidence: "live" });
-    const said = fact({ id: "f.said", title: "t", origin: s1, value: 1, verify: ok, evidence: "human" });
-    const found = fact({ id: "f.found", title: "t", origin: s1, value: 1, verify: fromFinding(r.findings.a, { ttl: "90d" }), evidence: "research" });
+    const seen = fact({ id: "f.seen", key: tk("f.seen", s1), title: "t", origin: s1, value: 1, verify: page("https://e.com").contains("x"), evidence: "live" });
+    const said = fact({ id: "f.said", key: tk("f.said", s1), title: "t", origin: s1, value: 1, verify: ok, evidence: "human" });
+    const found = fact({ id: "f.found", key: tk("f.found", s1), title: "t", origin: s1, value: 1, verify: fromFinding(r.findings.a, { ttl: "90d" }), evidence: "research" });
     expect([evidenceCeiling(seen), evidenceCeiling(said), evidenceCeiling(found)]).toEqual(["live", "human", "research"]);
-    const both = fact({ id: "f.both", title: "t", origin: s1, value: 1, verify: derived([seen, found]), evidence: "research" });
+    const both = fact({ id: "f.both", key: tk("f.both", s1), title: "t", origin: s1, value: 1, verify: derived([seen, found]), evidence: "research" });
     expect(evidenceCeiling(both)).toBe("research");
     const report = await compile([{ ...both, evidence: "live" }], { today: "2026-10-02", ctx: fakeCtx({ "https://e.com": { body: "x" } }) });
     expect(report.results.get("f.both")?.reasons.join(" ")).toContain('K19: evidence "live" is more than a derived can prove (at most "research")');

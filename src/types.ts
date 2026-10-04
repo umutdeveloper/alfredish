@@ -168,8 +168,8 @@ interface Present<K extends string, E extends Evidence> {
 export interface FactDef<E extends Evidence = Evidence> extends Present<"fact", E> {
   value: string | number | boolean;
   parked?: Parked;
-  /** The property this fact gives the value of (K22: one present fact per key). */
-  key?: KeyDef;
+  /** The property this fact gives the value of; required (K22: one present fact per key). */
+  key: KeyDef;
 }
 
 // ---- vocabulary ----

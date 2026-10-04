@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { tk } from "./helpers.ts";
 import { mkdtemp, readFile, writeFile, mkdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -21,9 +22,9 @@ function memory(question = "What do they pay?", value = "500 USD"): Def[] {
       regional: finding({ text: "regional dates", parked: { reason: "not our market", revisitWhen: after("2027-04-01") } }),
     },
   });
-  const median = fact({ id: "f.median", title: "Median budget", origin: s1, value, verify: fromFinding(scan.findings.median, { ttl: "90d" }), evidence: "research" });
+  const median = fact({ id: "f.median", key: tk("f.median", s1), title: "Median budget", origin: s1, value, verify: fromFinding(scan.findings.median, { ttl: "90d" }), evidence: "research" });
   const keep = decision({ id: "d.price", title: "Keep $290", origin: s1, restsOn: [median], review: "60d", verify: review({ by: "owner", at: "2026-10-01", every: "60d" }), evidence: "human" });
-  const self = fact({ id: "self.city", title: "City", origin: s1, value: "Somewhere", verify: review({ by: "owner", at: "2026-10-01", every: "180d" }), evidence: "human", parked: { reason: "profile", revisitWhen: after("2027-01-01") } });
+  const self = fact({ id: "self.city", key: tk("self.city", s1), title: "City", origin: s1, value: "Somewhere", verify: review({ by: "owner", at: "2026-10-01", every: "180d" }), evidence: "human", parked: { reason: "profile", revisitWhen: after("2027-01-01") } });
   const commits = rule({ id: "rule.commits", title: "English commits", origin: s1, text: "Commit messages are in English", appliesTo: "git", verify: review({ by: "owner", at: "2026-10-01", every: "90d" }), evidence: "human" });
   const later = idea({ id: "idea.title", title: "Title review", origin: s1, text: "Talk about the job title", reason: "focus elsewhere", revisitWhen: after("2026-12-01"), evidence: "human" });
   const launch = goal({ id: "goal.launch", title: "Launch the site", origin: s1, phase: { name: "Phase 0", ends: "2026-10-31" }, requires: [], doneWhen: page("https://example.invalid").contains("x"), evidence: "live" });

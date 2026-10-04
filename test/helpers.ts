@@ -1,5 +1,6 @@
 import type { ProbeContext } from "../src/types.ts";
-import { review, session } from "../src/dsl.ts";
+import { key, review, session } from "../src/dsl.ts";
+import type { KeyDef, SessionDef } from "../src/types.ts";
 
 export const s1 = session({ id: "s.2026-10-01", title: "test session", at: "2026-10-01", topic: "testing", questions: ["?"] });
 export const reviewed = review({ by: "owner", at: "2026-10-01", every: "90d" });
@@ -20,3 +21,7 @@ export function fakeCtx(pages: Record<string, { status?: number; body?: string; 
     },
   };
 }
+
+/** A key of its own for a test fact, so K22 never ties two test facts together. */
+export const tk = (id: string, origin: SessionDef): KeyDef =>
+  key({ subject: id.replace(/[^A-Za-z0-9]+(.)?/g, (_, c: string | undefined) => (c ? c.toUpperCase() : "")).replace(/^./, (c) => c.toLowerCase()), name: "value", valueType: "text", describe: `the value of ${id}`, origin });

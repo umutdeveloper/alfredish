@@ -113,7 +113,8 @@ export function shapeProblems(x: unknown): string[] {
       break;
     }
     case "fact":
-      if (d["key"] !== undefined && !isDefOf(d["key"], new Set(["key"]))) out.push(`key is not a key — ${FIX.link}`);
+      if (d["key"] === undefined) out.push("key is missing — give the fact the key of the property it states (see alfred keys <subject>)");
+      else if (!isDefOf(d["key"], new Set(["key"]))) out.push(`key is not a key — ${FIX.link}`);
       if (!["string", "number", "boolean"].includes(typeof d["value"])) out.push("value is missing — give the fact a value");
       if (d["parked"] !== undefined) {
         const p = d["parked"];

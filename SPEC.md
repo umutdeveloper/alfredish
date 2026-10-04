@@ -65,7 +65,7 @@ A past finding that is still relied on today becomes a present-tense `fact`, lin
 
 | Type | What | Own required fields | Red when… |
 |---|---|---|---|
-| `fact` | Something about the world | `value` | verification fails or expires; unused (K12) |
+| `fact` | Something about the world | `value`, `key` | verification fails or expires; unused (K12) |
 | `claim` | Something we say publicly (site, profile, post) | `text`, `where` (a `Location`), `restsOn` | the text is not there; a dependency is red; a fact dependency's evidence is too weak (K4) |
 | `decision` | A decision | `restsOn`, `review` (re-approval interval); optional `supersedes` | a dependency is red; re-approval expired |
 | `promise` | A commitment | `owner`, `due` (a date **or** a condition), `doneWhen`, `requires` | a precondition is red (at once); or the due date passed / due condition became true and `doneWhen` is not met |
@@ -81,7 +81,7 @@ A past finding that is still relied on today becomes a present-tense `fact`, lin
 |---|---|---|---|
 | `key` | A property of a subject that facts state a value of, e.g. `key:ada.budgetCap` (its own id namespace, so it never collides with a definition id) | `subject` (lowerCamelCase), `name` (lowerCamelCase), `valueType` (`amount`, `date`, `text`, `list`, `boolean`, `number`, `url`), `describe` (a few plain words); optional `distinctFrom` (keys it was compared with and is not) | One property only (K24). A new key near an existing one must say it is distinct (K23). No `verify`: a key states nothing about the world. |
 
-A `fact` may name its `key`. One present-tense fact per key (K22): a new value of the same property changes that fact,
+Every `fact` names its `key` (required). One present-tense fact per key (K22): a new value of the same property changes that fact,
 it does not add a second one.
 
 **Past-tense types:**

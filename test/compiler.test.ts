@@ -6,7 +6,7 @@ import {
   page, promise, raw, research, review, rule, source, url,
 } from "../src/dsl.ts";
 import type { PresentDef } from "../src/types.ts";
-import { fakeCtx, reviewed, s1 } from "./helpers.ts";
+import { fakeCtx, reviewed, s1, tk } from "./helpers.ts";
 
 const today = "2026-10-03" as const;
 const keep = (restsOn: readonly PresentDef[]) =>
@@ -15,18 +15,18 @@ const status = async (defs: unknown[], id: string, pages = {}) => (await compile
 
 describe("probes", () => {
   it("page.contains is green when the text is on the page, red otherwise", async () => {
-    const f = fact({ id: "f", title: "f", origin: s1, value: "x", verify: page("https://s").contains("No cookies"), evidence: "live" });
+    const f = fact({ id: "f", key: tk("f", s1), title: "f", origin: s1, value: "x", verify: page("https://s").contains("No cookies"), evidence: "live" });
     expect(await status([f, keep([f])], "f", { "https://s": { body: "<p>No cookies</p>" } })).toBe("green");
     expect(await status([f, keep([f])], "f", { "https://s": { body: "<p>No trackers</p>" } })).toBe("red");
   });
 
   it("header.contains checks response headers", async () => {
-    const f = fact({ id: "csp", title: "csp", origin: s1, value: "beacon allowed", evidence: "live", verify: header("https://s", "content-security-policy").contains("analytics.example.net") });
+    const f = fact({ id: "csp", key: tk("csp", s1), title: "csp", origin: s1, value: "beacon allowed", evidence: "live", verify: header("https://s", "content-security-policy").contains("analytics.example.net") });
     expect(await status([f, keep([f])], "csp", { "https://s": { headers: { "content-security-policy": "script-src https://analytics.example.net" } } })).toBe("green");
   });
 
   it("a probe that cannot run is unknown, never green (§8)", async () => {
-    const f = fact({ id: "f", title: "f", origin: s1, value: "x", verify: page("https://down").contains("x"), evidence: "live" });
+    const f = fact({ id: "f", key: tk("f", s1), title: "f", origin: s1, value: "x", verify: page("https://down").contains("x"), evidence: "live" });
     expect(await status([f, keep([f])], "f", { "https://down": new Error("offline") })).toBe("unknown");
   });
 });
@@ -48,7 +48,7 @@ describe("confirm and after", () => {
 
 describe("K3 — propagation", () => {
   it("a red fact turns everything resting on it red, with the chain", async () => {
-    const f = fact({ id: "price", title: "price", origin: s1, value: "100", verify: page("https://s").contains("$100"), evidence: "live" });
+    const f = fact({ id: "price", key: tk("price", s1), title: "price", origin: s1, value: "100", verify: page("https://s").contains("$100"), evidence: "live" });
     const c = claim({ id: "c", title: "c", origin: s1, text: "t", where: url("https://s"), restsOn: [f], verify: page("https://s").contains("t"), evidence: "live" });
     const r = await compile([f, c, keep([f])], { today, ctx: fakeCtx({ "https://s": { body: "t $200" } }) });
     expect(r.results.get("price")!.status).toBe("red");
@@ -59,7 +59,7 @@ describe("K3 — propagation", () => {
 
 describe("K4 — public claims", () => {
   it("rejects a weak fact that bypassed the type check", async () => {
-    const weak = fact({ id: "weak", title: "w", origin: s1, value: 1, verify: source("https://x", { readAt: "2026-10-01", ttl: "30d" }), evidence: "codeRead" });
+    const weak = fact({ id: "weak", key: tk("weak", s1), title: "w", origin: s1, value: 1, verify: source("https://x", { readAt: "2026-10-01", ttl: "30d" }), evidence: "codeRead" });
     const c = claim({ id: "c", title: "c", origin: s1, text: "t", where: url("https://s"), verify: page("https://s").contains("t"), evidence: "live", restsOn: [weak as never] });
     const r = await compile([c], { today, ctx: fakeCtx({ "https://s": { body: "t" } }) });
     expect(r.results.get("c")!.reasons.join()).toContain("K4");
@@ -157,10 +157,10 @@ describe("K12 — unused knowledge", () => {
       orphan: finding({ text: "a finding nobody uses" }),
     },
   });
-  const median = fact({ id: "f.median", title: "median", origin: s1, value: "500 USD", verify: fromFinding(scan.findings.median, { ttl: "90d" }), evidence: "research" });
+  const median = fact({ id: "f.median", key: tk("f.median", s1), title: "median", origin: s1, value: "500 USD", verify: fromFinding(scan.findings.median, { ttl: "90d" }), evidence: "research" });
 
   it("flags unused findings and facts, accepts used and parked ones", async () => {
-    const lonely = fact({ id: "f.lonely", title: "lonely", origin: s1, value: 1, verify: source("https://x", { readAt: "2026-10-01", ttl: "30d" }), evidence: "source" });
+    const lonely = fact({ id: "f.lonely", key: tk("f.lonely", s1), title: "lonely", origin: s1, value: 1, verify: source("https://x", { readAt: "2026-10-01", ttl: "30d" }), evidence: "source" });
     const r = await compile([keep([median]), lonely], { today, ctx: fakeCtx({ "https://eu": { body: "" } }) });
     const ids = r.issues.filter((i) => i.rule === "K12").map((i) => i.id);
     expect(ids).toEqual(expect.arrayContaining(["r.scan#orphan", "f.lonely"]));
@@ -175,7 +175,7 @@ describe("K12 — unused knowledge", () => {
 
   it("raw data must exist and be the source of some finding", async () => {
     const r2 = research({ id: "r.two", title: "t", origin: s1, at: "2026-10-01", question: "?", readWhen: "-", rawData: ["missing/a.csv", "exists/unused.csv"], findings: { x: finding({ text: "x", source: raw("missing/a.csv") }) } });
-    const fx = fact({ id: "f.x", title: "x", origin: s1, value: 1, verify: fromFinding(r2.findings.x, { ttl: "30d" }), evidence: "research" });
+    const fx = fact({ id: "f.x", key: tk("f.x", s1), title: "x", origin: s1, value: 1, verify: fromFinding(r2.findings.x, { ttl: "30d" }), evidence: "research" });
     const ctx = fakeCtx();
     const r = await compile([keep([fx])], { today, ctx, fileExists: ctx.fileExists });
     expect(r.results.get("r.two")!.status).toBe("red");
@@ -191,13 +191,13 @@ describe("K12 — unused knowledge", () => {
 
 describe("K12 — self facts, rule and idea bases", () => {
   it("facts about the owner are used by the profile view", async () => {
-    const city = fact({ id: "self.city", title: "City", origin: s1, value: "X", verify: reviewed, evidence: "human" });
+    const city = fact({ id: "self.city", key: tk("self.city", s1), title: "City", origin: s1, value: "X", verify: reviewed, evidence: "human" });
     const r = await compile([city], { today, ctx: fakeCtx() });
     expect(r.issues.filter((i) => i.rule === "K12")).toEqual([]);
   });
 
   it("a rule's restsOn counts as use and propagates red", async () => {
-    const bias = fact({ id: "f.bias", title: "bias", origin: s1, value: "x", verify: page("https://s").contains("bias"), evidence: "live" });
+    const bias = fact({ id: "f.bias", key: tk("f.bias", s1), title: "bias", origin: s1, value: "x", verify: page("https://s").contains("bias"), evidence: "live" });
     const r1 = rule({ id: "r.us", title: "say you are in the US", origin: s1, text: "t", appliesTo: "measurement", restsOn: [bias], verify: reviewed, evidence: "human" });
     const green = await compile([r1], { today, ctx: fakeCtx({ "https://s": { body: "bias" } }) });
     expect(green.issues).toEqual([]);
@@ -206,7 +206,7 @@ describe("K12 — self facts, rule and idea bases", () => {
   });
 
   it("an idea's basedOn counts as use but never makes the idea red", async () => {
-    const f = fact({ id: "f.basis", title: "basis", origin: s1, value: "x", verify: page("https://s").contains("x"), evidence: "live" });
+    const f = fact({ id: "f.basis", key: tk("f.basis", s1), title: "basis", origin: s1, value: "x", verify: page("https://s").contains("x"), evidence: "live" });
     const i = idea({ id: "i.b", title: "i", origin: s1, text: "t", reason: "r", basedOn: [f], revisitWhen: after("2027-01-01"), evidence: "human" });
     const r = await compile([i], { today, ctx: fakeCtx({ "https://s": { body: "" } }) });
     expect(r.results.get("f.basis")!.status).toBe("red");
