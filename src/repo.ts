@@ -11,6 +11,7 @@ import { isDef, type Issue } from "./compiler.ts";
 import { diffSnapshots, snapshot, type DiffLine, type Snapshot } from "./snapshot.ts";
 import { bodyHash, parseGenerated, render, type View } from "./views.ts";
 import { typeEscapes } from "./escapes.ts";
+import { looksLikeDef } from "./validate.ts";
 import type { Def, ISODate, ProbeCache, ProbeContext } from "./types.ts";
 
 const run = promisify(execFile);
@@ -88,6 +89,52 @@ export async function checkPast(snap: Snapshot, today: ISODate, o: RepoOptions):
     const now = snap[id];
     if (!now) issues.push({ id, status: "red", rule: "K5", message: `past deleted (${at})` });
     else if (now.hash !== old.hash) issues.push({ id, status: "red", rule: "K5", message: `past changed (${at})` });
+  }
+  return issues;
+}
+
+const PRESENT_KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule"]);
+const refId = (x: unknown) => (typeof x === "string" && x.startsWith("@") ? x.slice(1) : undefined);
+
+/**
+ * K20 (nothing disappears silently) and K21 (no back-dating), compared with the last commit.
+ * K20: a present-tense definition in HEAD that is gone must be listed in `retires` of an event dated today.
+ * K21: a definition new since HEAD must be born in a session that is new since HEAD or dated today.
+ */
+export async function checkHistory(snap: Snapshot, today: ISODate, o: RepoOptions): Promise<Issue[]> {
+  const head = await snapshotAt("HEAD", o);
+  if (!head) return [];
+  const issues: Issue[] = [];
+  const retired = new Set<string>();
+  for (const e of Object.values(snap)) {
+    if (e.kind === "event" && e.data["at"] === today && Array.isArray(e.data["retires"])) for (const id of e.data["retires"]) retired.add(String(id));
+  }
+  for (const [id, old] of Object.entries(head)) {
+    if (!PRESENT_KINDS.has(old.kind) || snap[id] || retired.has(id)) continue;
+    issues.push({ id, status: "red", rule: "K20", message: `removed since the last commit — record it in an event dated ${today} with retires: ["${id}"] and say why` });
+  }
+  for (const [id, now] of Object.entries(snap)) {
+    if (head[id] || now.kind === "session") continue;
+    const origin = refId(now.data["origin"]);
+    const born = origin ? head[origin] : undefined;
+    if (born && born.data["at"] !== today) {
+      issues.push({ id, status: "red", rule: "K21", message: `new, but born in ${origin} (${String(born.data["at"])}), which is already committed — use the current session as origin` });
+    }
+  }
+  return issues;
+}
+
+/** K18: every definition exported from a file under the memory folder is reachable from the index. */
+export async function checkReachable(memoryDirAbs: string, reached: ReadonlySet<unknown>, base: string): Promise<Issue[]> {
+  const issues: Issue[] = [];
+  for (const f of (await tsFiles(memoryDirAbs).catch(() => [] as string[])).sort()) {
+    const mod = (await import(pathToFileURL(f).href)) as Record<string, unknown>;
+    const rel = relative(base, f).split(sep).join("/");
+    for (const x of Object.values(mod)) {
+      if (looksLikeDef(x) && !reached.has(x)) {
+        issues.push({ id: String(x["id"]), status: "red", rule: "K18", message: `defined in ${rel} but not reachable from the index — export it from the index` });
+      }
+    }
   }
   return issues;
 }

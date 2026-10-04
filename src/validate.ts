@@ -81,6 +81,7 @@ export function shapeProblems(x: unknown): string[] {
       if (!isDate(d["at"])) out.push(`at — ${FIX.date}`);
       str("text");
       out.push(...linkList(d["affects"], "affects", true));
+      if (d["retires"] !== undefined && !(Array.isArray(d["retires"]) && d["retires"].every(isStr))) out.push("retires must be a list of definition ids");
       break;
     case "research": {
       if (!isDate(d["at"])) out.push(`at — ${FIX.date}`);

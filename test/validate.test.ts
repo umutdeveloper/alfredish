@@ -43,3 +43,19 @@ describe("K16 — type rules also hold at run time", () => {
     expect(r.results.get("d.rests")?.reasons.join(" ")).toContain("depends on red: f.broken");
   });
 });
+
+describe("K19 — evidence cannot claim more than the test proves", () => {
+  it("each verification kind has its ceiling; derived takes the weakest input", async () => {
+    const { evidenceCeiling } = await import("../src/compiler.ts");
+    const { derived, fromFinding, finding, research, page } = await import("../src/dsl.ts");
+    const r = research({ id: "r", title: "t", origin: s1, at: "2026-10-01", question: "?", readWhen: "w", findings: { a: finding({ text: "x" }) } });
+    const seen = fact({ id: "f.seen", title: "t", origin: s1, value: 1, verify: page("https://e.com").contains("x"), evidence: "live" });
+    const said = fact({ id: "f.said", title: "t", origin: s1, value: 1, verify: ok, evidence: "human" });
+    const found = fact({ id: "f.found", title: "t", origin: s1, value: 1, verify: fromFinding(r.findings.a, { ttl: "90d" }), evidence: "research" });
+    expect([evidenceCeiling(seen), evidenceCeiling(said), evidenceCeiling(found)]).toEqual(["live", "human", "research"]);
+    const both = fact({ id: "f.both", title: "t", origin: s1, value: 1, verify: derived([seen, found]), evidence: "research" });
+    expect(evidenceCeiling(both)).toBe("research");
+    const report = await compile([{ ...both, evidence: "live" }], { today: "2026-10-02", ctx: fakeCtx({ "https://e.com": { body: "x" } }) });
+    expect(report.results.get("f.both")?.reasons.join(" ")).toContain('K19: evidence "live" is more than a derived can prove (at most "research")');
+  });
+});

@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkImports, checkPast, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkHistory, checkImports, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { snapshot } from "./snapshot.ts";
 import type { Def, ISODate } from "./types.ts";
 import { buildViews } from "./views.ts";
@@ -48,7 +48,7 @@ async function main(argv: string[]): Promise<number> {
   const repo = { base, memoryDir: basename(memoryDirAbs), ctx };
   const mod = (await import(pathToFileURL(entry).href)) as Record<string, unknown>;
   const roots = Object.values(mod);
-  const { defs } = collect(roots);
+  const { defs, invalid } = collect(roots);
   const day = today();
   // Scope (SPEC §9): a full check forces every probe live; an area forces its own chain; everything else reuses the cache.
   let scope: ((d: Def) => boolean) | undefined;
@@ -77,6 +77,8 @@ async function main(argv: string[]): Promise<number> {
         ...(await checkPast(snap, day, repo)),
         ...(await checkImports(repo)),
         ...(await checkTypeEscapes(repo)),
+        ...(await checkHistory(snap, day, repo)),
+        ...(await checkReachable(memoryDirAbs, new Set<unknown>([...defs, ...invalid.keys()]), base)),
       );
       console.log(formatCheck(report));
       return report.issues.some((i) => i.status === "red") ? 1 : 0;

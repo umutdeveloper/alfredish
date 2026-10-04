@@ -249,6 +249,27 @@ async function ownStatus(d: Def, o: CompileOptions, probes: Probes): Promise<{ s
   }
 }
 
+// ---- K19: evidence cannot claim more than the test proves ----
+
+const EVIDENCE_RANK: Record<string, number> = { live: 6, source: 5, human: 4, research: 3, codeRead: 2, secondHand: 1 };
+const CEILING: Partial<Record<Verify["kind"], string>> = {
+  probe: "live", agentProbe: "live", source: "source", review: "human", confirm: "human", after: "human", fromFinding: "research",
+};
+
+/** The strongest evidence a definition's verification can give (derived: the weakest of its inputs). */
+export function evidenceCeiling(d: PresentDef, seen = new Set<Def>()): string {
+  const v = d.verify;
+  if (v.kind !== "derived") return CEILING[v.kind] ?? "secondHand";
+  let weakest = "live";
+  for (const x of v.from) {
+    if (!isPresent(x) || seen.has(x)) continue;
+    seen.add(x);
+    const c = [x.evidence, evidenceCeiling(x, seen)].reduce((a, b) => (EVIDENCE_RANK[a]! <= EVIDENCE_RANK[b]! ? a : b));
+    if (EVIDENCE_RANK[c]! < EVIDENCE_RANK[weakest]!) weakest = c;
+  }
+  return weakest;
+}
+
 // ---- live probes (SPEC §9) ----
 
 const MAX_PARALLEL = 16;
@@ -323,7 +344,15 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
   let tests = 0;
   for (const d of defs) {
     if (isPresent(d)) tests++;
-    own.set(d, await ownStatus(d, o, probes));
+    const mine = await ownStatus(d, o, probes);
+    if (isPresent(d)) {
+      const ceiling = evidenceCeiling(d);
+      if (EVIDENCE_RANK[d.evidence]! > EVIDENCE_RANK[ceiling]!) {
+        mine.status = "red";
+        mine.reasons.push(`K19: evidence "${d.evidence}" is more than a ${d.verify.kind} can prove (at most "${ceiling}") — lower the evidence or use a stronger test`);
+      }
+    }
+    own.set(d, mine);
     if (d.kind === "goal" || d.kind === "promise") doneMap.set(d, (await evalVerify(d.verify, o.today, o.ctx, probes)).status === "green");
   }
 

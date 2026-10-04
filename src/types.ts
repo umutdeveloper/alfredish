@@ -150,6 +150,8 @@ export interface EventDef {
   at: ISODate;
   text: string;
   affects: readonly Def[];
+  /** Ids of present-tense definitions removed on this event's day (K20). */
+  retires?: readonly string[];
 }
 
 // ---- present-tense types ----

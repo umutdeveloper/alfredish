@@ -209,6 +209,52 @@ describe.concurrent("attacks: mistakes the gate must refuse", () => {
     expect(r.out).toContain("K16: location is not url() or local()");
   }, TIMEOUT);
 
+  it("an owner-reviewed fact labelled 'live' behind a public claim is caught (K19)", async () => {
+    const dir = await fresh();
+    await addDefs(dir, `export const lie = fact({ id: "site.customers", title: "Happy customers", origin: sToday, value: 100, verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "live" });
+export const lieClaim = claim({ id: "site.claim.customers", title: "Site: 100 happy customers", origin: sToday, text: "100 happy customers", where: url("https://example.com/"), restsOn: [lie], verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain(`site.customers — K19: evidence "live" is more than a review can prove (at most "human")`);
+    expect(r.out).toContain("site.claim.customers — depends on red: site.customers");
+  }, TIMEOUT);
+
+  it("a deleted present-tense rule is caught (K20); retiring it in an event dated today is accepted", async () => {
+    const dir = await fresh();
+    const p = join(dir, "memory/rules.ts");
+    await writeFile(p, (await readFile(p, "utf8")).replace(/export const noInvestment = rule\(.*\n/, ""));
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain(`rule.noInvestment — K20: removed since the last commit — record it in an event dated ${TODAY} with retires: ["rule.noInvestment"]`);
+    await edit(dir, "memory/events.ts", `import { sOld } from "./sessions.ts";`, `import { sOld, sToday } from "./sessions.ts";`);
+    const e = join(dir, "memory/events.ts");
+    await writeFile(e, (await readFile(e, "utf8")) + `export const retired = event({ id: "event.retired", title: "Rule dropped", origin: sToday, at: "${TODAY}", text: "The owner dropped the advice rule.", retires: ["rule.noInvestment"] });\n`);
+    expect((await gate(dir)).green).toBe(true);
+  }, TIMEOUT);
+
+  it("a definition in a file the index does not export is caught (K18)", async () => {
+    const dir = await fresh();
+    await writeFile(join(dir, "memory/hidden.ts"), `import { cmd, fact } from "./lang.ts";
+import { sToday } from "./sessions.ts";
+export const hidden = fact({ id: "work.serverDown", title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });\n`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("work.serverDown — K18: defined in memory/hidden.ts but not reachable from the index");
+  }, TIMEOUT);
+
+  it("a new decision back-dated into a committed session is caught (K21); a session migrated in the same commit is accepted", async () => {
+    const dir = await fresh();
+    await addDefs(dir, `export const backdated = decision({ id: "work.backdated", title: "We decided this long ago", origin: sOld, restsOn: [], review: "365d", verify: review({ by: "owner", at: "${OLD}", every: "365d" }), evidence: "human" });\n`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("work.backdated — K21: new, but born in s.old");
+    const fresh2 = await fresh();
+    await addDefs(fresh2, `import { session } from "./lang.ts";
+export const sMigrated = session({ id: "s.migrated", title: "Old notes", at: "2026-01-05", topic: "Old notes", questions: ["What did we decide then?"] });
+export const migrated = decision({ id: "work.migrated", title: "An old decision, moved in", origin: sMigrated, restsOn: [], review: "3650d", verify: review({ by: "owner", at: "${TODAY}", every: "3650d" }), evidence: "human" });\n`);
+    expect((await gate(fresh2)).green).toBe(true);
+  }, TIMEOUT);
+
   // -- known holes: the gate still says green --
 
   it("HOLE: a local path in free text ($HOME form)", async () => {
@@ -247,20 +293,6 @@ describe.concurrent("attacks: mistakes the gate must refuse", () => {
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: an owner-reviewed fact labelled 'live' backs a public claim (K4 trusts the label)", async () => {
-    const dir = await fresh();
-    await addDefs(dir, `export const lie = fact({ id: "site.customers", title: "Happy customers", origin: sToday, value: 100, verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "live" });
-export const lieClaim = claim({ id: "site.claim.customers", title: "Site: 100 happy customers", origin: sToday, text: "100 happy customers", where: url("https://example.com/"), restsOn: [lie], verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
-    stillOpen(await gate(dir));
-  }, TIMEOUT);
-
-  it("HOLE: a present-tense rule is deleted", async () => {
-    const dir = await fresh();
-    const p = join(dir, "memory/rules.ts");
-    await writeFile(p, (await readFile(p, "utf8")).replace(/export const noInvestment = rule\(.*\n/, ""));
-    stillOpen(await gate(dir));
-  }, TIMEOUT);
-
   it("HOLE: a rule is quietly weakened (budget 1,000 -> 100,000 EUR)", async () => {
     const dir = await fresh();
     await edit(dir, "memory/rules.ts", "Spend at most 1,000 EUR", "Spend at most 100,000 EUR");
@@ -273,25 +305,12 @@ export const lieClaim = claim({ id: "site.claim.customers", title: "Site: 100 ha
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a red definition in a file the index does not export is never checked", async () => {
-    const dir = await fresh();
-    await writeFile(join(dir, "memory/hidden.ts"), `import { cmd, fact } from "./lang.ts";
-import { sToday } from "./sessions.ts";
-export const hidden = fact({ id: "work.serverDown", title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });\n`);
-    stillOpen(await gate(dir));
-  }, TIMEOUT);
-
-  it("HOLE: a new decision is back-dated into an earlier session", async () => {
-    const dir = await fresh();
-    await addDefs(dir, `export const backdated = decision({ id: "work.backdated", title: "We decided this long ago", origin: sOld, restsOn: [], review: "365d", verify: review({ by: "owner", at: "${OLD}", every: "365d" }), evidence: "human" });\n`);
-    stillOpen(await gate(dir));
-  }, TIMEOUT);
-
   it("HOLE: a second fact contradicts an existing one and a decision rests on both", async () => {
     const dir = await fresh();
     await edit(dir, "memory/decisions.ts", "restsOn: [jobTitle]", "restsOn: [jobTitle, jobTitle2]");
+    await edit(dir, "memory/decisions.ts", `import { sOld } from "./sessions.ts";`, `import { sOld, sToday } from "./sessions.ts";`);
     // Declared before the decision that uses it, so the type checker has nothing to say.
-    await edit(dir, "memory/decisions.ts", "export const focus =", `export const jobTitle2 = fact({ id: "work.jobTitle", title: "Official job title", origin: sOld, value: "Principal Engineer", verify: review({ by: "owner", at: "${OLD}", every: "180d" }), evidence: "human" });\nexport const focus =`);
+    await edit(dir, "memory/decisions.ts", "export const focus =", `export const jobTitle2 = fact({ id: "work.jobTitle", title: "Official job title", origin: sToday, value: "Principal Engineer", verify: review({ by: "owner", at: "${OLD}", every: "180d" }), evidence: "human" });\nexport const focus =`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
