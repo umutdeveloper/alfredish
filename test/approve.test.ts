@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildRecord, changesSince, groupOf, writeSigned, type Decision } from "../src/approve.ts";
+import { buildRecord, changesSince, groupOf, textChange, writeSigned, type Decision } from "../src/approve.ts";
 import { loadApprovals, recordName, type ApprovedState } from "../src/approval.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 
@@ -44,6 +44,26 @@ describe("alfred approve — what changed (§14)", () => {
     const price = c.find((x) => x.id === "f.price")!;
     expect(price).toMatchObject({ why: "price went up", note: "check the page", test: 'page https://e.com contains "$390"' });
     expect(price.detail).toContain('value: "$290" → "$390"');
+  });
+
+  it("shows the owner everything they sign, never shortened: the changed words of a long text, every field of a new definition", () => {
+    const old = "At session end, before the commit: re-read the whole conversation and list every decision, promise, fact, idea or change not yet recorded as a definition; show Umut that one list, record what he confirms, then build, check and make the session's commit.";
+    const now = old.replace("record what he confirms, then build, check and make the session's commit.", "record what he confirms with its reason in the session's changes, then build and check; ask Umut to run alfred-approve in his own Terminal, check again, and only then make the session's commit.");
+    expect(textChange(old, now)).toEqual([
+      "…that one list, record what he",
+      "− confirms, then build, check and",
+      "+ confirms with its reason in the session's changes, then build and check; ask Umut to run alfred-approve in his own Terminal, check again, and only then",
+      "make the session's commit.",
+    ]);
+    const longVerify = "x".repeat(300);
+    const c = changesSince(state({ r: item("rule", "h1", { title: "R", text: old, verify: "a" }) }), {
+      r: item("rule", "h2", { title: "R", text: now, verify: longVerify }),
+      n: item("rule", "h3", { id: "n", title: "New", text: old, appliesTo: "memory" }),
+    });
+    const changed = c.find((x) => x.id === "r")!.shown.join("\n");
+    expect(changed).toContain("+ confirms with its reason in the session's changes");
+    expect(changed).toContain(`  + ${longVerify}`);
+    expect(c.find((x) => x.id === "n")!.shown).toEqual(["title: New", `text: ${old}`, "appliesTo: memory"]);
   });
 });
 

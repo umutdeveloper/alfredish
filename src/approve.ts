@@ -22,6 +22,51 @@ export interface Change {
   why?: string;
   /** A correction note the owner wrote last time, shown above the new version. */
   note?: string;
+  /** What the owner signs, never shortened: every field of a new or removed definition, every changed field. */
+  shown: string[];
+}
+
+const CONTEXT_WORDS = 6;
+const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
+
+/** One changed text: the unchanged words around it as context, then the removed and the added words in full. */
+export function textChange(before: string, after: string): string[] {
+  const a = before.split(" ");
+  const b = after.split(" ");
+  let p = 0;
+  while (p < a.length && p < b.length && a[p] === b[p]) p++;
+  let s = 0;
+  while (s < a.length - p && s < b.length - p && a[a.length - 1 - s] === b[b.length - 1 - s]) s++;
+  const head = a.slice(Math.max(0, p - CONTEXT_WORDS), p).join(" ");
+  const tail = a.slice(a.length - s, a.length - s + CONTEXT_WORDS).join(" ");
+  const out: string[] = [];
+  if (head) out.push(`${p > CONTEXT_WORDS ? "…" : ""}${head}`);
+  const gone = a.slice(p, a.length - s).join(" ");
+  const added = b.slice(p, b.length - s).join(" ");
+  if (gone) out.push(`− ${gone}`);
+  if (added) out.push(`+ ${added}`);
+  if (tail) out.push(`${tail}${s > CONTEXT_WORDS ? "…" : ""}`);
+  return out;
+}
+
+function shownFor(op: Op, was: Record<string, unknown> | undefined, now: Record<string, unknown> | undefined): string[] {
+  if (op !== "~") {
+    const data = (op === "+" ? now : was) ?? {};
+    return Object.entries(data).filter(([k]) => k !== "id").map(([k, v]) => `${k}: ${show(v)}`);
+  }
+  const out: string[] = [];
+  for (const k of [...new Set([...Object.keys(was ?? {}), ...Object.keys(now ?? {})])].sort()) {
+    const x = was?.[k];
+    const y = now?.[k];
+    if (JSON.stringify(x) === JSON.stringify(y)) continue;
+    out.push(`${k}:`);
+    if (typeof x === "string" && typeof y === "string") out.push(...textChange(x, y).map((l) => `  ${l}`));
+    else {
+      if (x !== undefined) out.push(`  − ${show(x)}`);
+      if (y !== undefined) out.push(`  + ${show(y)}`);
+    }
+  }
+  return out;
 }
 
 const OWNER_KINDS = new Set(["decision", "rule", "promise", "goal", "idea", "key", "event", "research", "session"]);
@@ -50,7 +95,7 @@ export function changesSince(state: ApprovedState | undefined, snap: Snapshot): 
   const why = reasons(snap);
   const out: Change[] = diffSnapshots(approved, snap).map((d) => {
     const data = snap[d.id]?.data;
-    const c: Change = { id: d.id, op: d.op, kind: d.kind, group: groupOf(d.op, d.kind, data), detail: d.detail };
+    const c: Change = { id: d.id, op: d.op, kind: d.kind, group: groupOf(d.op, d.kind, data), detail: d.detail, shown: shownFor(d.op, approved[d.id]?.data, data) };
     if (data && c.group === "machine") c.test = String(data["verify"] ?? "");
     const w = why.get(d.id);
     if (w) c.why = w;
@@ -168,7 +213,7 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
   for (const c of owner) {
     if (c.note) console.log(`  (your note last time: ${c.note})`);
     const why = c.why ?? (c.kind === "session" ? "the session record: its topic, questions and the reasons above" : "(no reason given)");
-    console.log(`${c.op} ${c.id}  [${c.kind}, ${SYMBOL[c.op]}]\n    ${c.detail}\n    why: ${why}`);
+    console.log(`${c.op} ${c.id}  [${c.kind}, ${SYMBOL[c.op]}]\n${c.shown.map((l) => `    ${l}`).join("\n")}\n    why: ${why}`);
     const a = (await ask(c.op === "-" ? "  [a]pprove removal, [s]kip: " : "  [a]pprove, [c]orrect, [r]eject, [s]kip: ")).toLowerCase();
     if (a === "a") decisions.set(c.id, { kind: "approve" });
     else if (a === "c" && c.op !== "-") decisions.set(c.id, { kind: "correct", note: await ask("    note for the agent: ") });
@@ -179,7 +224,7 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
   }
   if (machine.length) {
     console.log("\n— Machine-checked (each shown with its test) —");
-    for (const c of machine) console.log(`${c.op} ${c.id}  ${c.detail}\n    test: ${c.test}${c.why ? `\n    why: ${c.why}` : ""}`);
+    for (const c of machine) console.log(`${c.op} ${c.id}\n${c.shown.map((l) => `    ${l}`).join("\n")}\n    test: ${c.test}${c.why ? `\n    why: ${c.why}` : ""}`);
     const all = (await ask(`  approve all ${machine.length}? [y]es, [o]ne by one, [n]o: `)).toLowerCase();
     for (const c of machine) {
       if (all === "y") decisions.set(c.id, { kind: "approve" });
