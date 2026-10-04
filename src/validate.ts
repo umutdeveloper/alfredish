@@ -2,7 +2,7 @@
 // shapeProblems never throws: it is what keeps a malformed definition from crashing the rest of the compiler.
 import type { Def } from "./types.ts";
 
-const KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "session", "event", "research"]);
+const KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "session", "event", "research", "key"]);
 const PRESENT = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule"]);
 const EVIDENCE = new Set(["live", "source", "human", "research", "codeRead", "secondHand"]);
 const CONDITIONS = new Set(["probe", "confirm", "after", "derived"]);
@@ -99,7 +99,21 @@ export function shapeProblems(x: unknown): string[] {
       }
       break;
     }
+    case "key": {
+      const camel = /^[a-z][A-Za-z0-9]*$/;
+      if (!isStr(d["subject"]) || !camel.test(d["subject"])) out.push("subject must be a lowerCamelCase name (e.g. ada)");
+      if (!isStr(d["name"]) || !camel.test(d["name"])) out.push("name must be a lowerCamelCase name (e.g. budgetCap)");
+      if (isStr(d["subject"]) && isStr(d["name"]) && d["id"] !== `key:${d["subject"]}.${d["name"]}`) out.push("id must be key:subject.name — build keys with key()");
+      if (!["amount", "date", "text", "list", "boolean", "number", "url"].includes(d["valueType"] as string)) out.push("valueType must be amount, date, text, list, boolean, number or url");
+      str("describe");
+      if (d["distinctFrom"] !== undefined) {
+        if (!Array.isArray(d["distinctFrom"])) out.push("distinctFrom must be a list of keys");
+        else d["distinctFrom"].forEach((x, i) => { if (!isDefOf(x, new Set(["key"]))) out.push(`distinctFrom[${i}] is not a key — ${FIX.link}`); });
+      }
+      break;
+    }
     case "fact":
+      if (d["key"] !== undefined && !isDefOf(d["key"], new Set(["key"]))) out.push(`key is not a key — ${FIX.link}`);
       if (!["string", "number", "boolean"].includes(typeof d["value"])) out.push("value is missing — give the fact a value");
       if (d["parked"] !== undefined) {
         const p = d["parked"];

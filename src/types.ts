@@ -168,6 +168,26 @@ interface Present<K extends string, E extends Evidence> {
 export interface FactDef<E extends Evidence = Evidence> extends Present<"fact", E> {
   value: string | number | boolean;
   parked?: Parked;
+  /** The property this fact gives the value of (K22: one present fact per key). */
+  key?: KeyDef;
+}
+
+// ---- vocabulary ----
+
+export type ValueType = "amount" | "date" | "text" | "list" | "boolean" | "number" | "url";
+
+/** A property of a subject (e.g. ada.budgetCap). States nothing about the world, so it has no verify. */
+export interface KeyDef {
+  kind: "key";
+  id: string; // `key:${subject}.${name}` — its own namespace, so a key never collides with a definition id
+  title: string;
+  origin: SessionDef;
+  subject: string;
+  name: string;
+  valueType: ValueType;
+  describe: string;
+  /** Keys this one was compared with and is not the same property as (K23). */
+  distinctFrom?: readonly KeyDef[];
 }
 
 /** K4: facts behind a claim must be live/source; our own choices (decisions, rules…) may back a claim. */
@@ -234,4 +254,4 @@ export type PresentDef<E extends Evidence = Evidence> =
   | RuleDef<E>;
 
 export type PastDef = SessionDef | EventDef | ResearchDef;
-export type Def = PresentDef | PastDef;
+export type Def = PresentDef | PastDef | KeyDef;

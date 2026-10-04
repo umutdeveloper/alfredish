@@ -43,9 +43,10 @@ const ok = review({ by: "owner", at: "${OLD}", every: "365d" });
 export const budget = rule({ id: "rule.budget", title: "Budget cap", origin: sOld, appliesTo: "money", text: "Spend at most 1,000 EUR a month.", verify: ok, evidence: "human" });
 export const noInvestment = rule({ id: "rule.noInvestment", title: "No investment advice", origin: sOld, appliesTo: "advice", text: "Never give investment advice.", verify: ok, evidence: "human" });
 `,
-  "memory/decisions.ts": `import { decision, fact, review } from "./lang.ts";
+  "memory/decisions.ts": `import { decision, fact, key, review } from "./lang.ts";
 import { sOld } from "./sessions.ts";
-export const jobTitle = fact({ id: "work.title", title: "Official job title", origin: sOld, value: "Senior Developer", verify: review({ by: "owner", at: "${OLD}", every: "180d" }), evidence: "human" });
+export const titleKey = key({ subject: "work", name: "jobTitle", valueType: "text", describe: "official job title", origin: sOld });
+export const jobTitle = fact({ id: "work.title", title: "Official job title", origin: sOld, value: "Senior Developer", key: titleKey, verify: review({ by: "owner", at: "${OLD}", every: "180d" }), evidence: "human" });
 export const focus = decision({ id: "work.focus", title: "Focus on the main job this year", origin: sOld, restsOn: [jobTitle], review: "30d", verify: review({ by: "owner", at: "${OLD}", every: "30d" }), evidence: "human" });
 export const dispatch = decision({ id: "work.dispatch", title: "Tickets are worked in the work folder", origin: sOld, restsOn: [], review: "365d", verify: review({ by: "owner", at: "${OLD}", every: "365d" }), evidence: "human" });
 `,
@@ -123,6 +124,7 @@ beforeAll(async () => {
   // The memory carries its own copy of Alfredish (so attacks on it stay inside the copy); libraries are linked.
   await cp(join(REPO, "src"), join(baseline, "vendor/alfredish/src"), { recursive: true });
   await symlink(join(REPO, "node_modules"), join(baseline, "node_modules"));
+  await symlink(join(REPO, "models"), join(baseline, "vendor/alfredish/models"));
   await git(baseline, "init", "-q");
   await git(baseline, "config", "user.email", "t@t");
   await git(baseline, "config", "user.name", "t");
@@ -253,6 +255,38 @@ export const hidden = fact({ id: "work.serverDown", title: "The server is down",
 export const sMigrated = session({ id: "s.migrated", title: "Old notes", at: "2026-01-05", topic: "Old notes", questions: ["What did we decide then?"] });
 export const migrated = decision({ id: "work.migrated", title: "An old decision, moved in", origin: sMigrated, restsOn: [], review: "3650d", verify: review({ by: "owner", at: "${TODAY}", every: "3650d" }), evidence: "human" });\n`);
     expect((await gate(fresh2)).green).toBe(true);
+  }, TIMEOUT);
+
+  it("a second value for an existing property, under the same key, is caught (K22)", async () => {
+    const dir = await fresh();
+    await addDefs(dir, `import { titleKey } from "./decisions.ts";
+export const title2 = fact({ id: "work.title2", title: "Job title", origin: sToday, value: "Principal Engineer", key: titleKey, verify: review({ by: "owner", at: "${TODAY}", every: "180d" }), evidence: "human" });\n`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("K22: two values for key:work.jobTitle: work.title, work.title2");
+  }, TIMEOUT);
+
+  it("a second value under a renamed key is caught (K23); a real new property passes once decided", async () => {
+    const dir = await fresh();
+    await addDefs(dir, `import { key } from "./lang.ts";
+import { titleKey } from "./decisions.ts";
+export const roleKey = key({ subject: "work", name: "officialRole", valueType: "text", describe: "official job title held", origin: sToday });
+export const title2 = fact({ id: "work.title2", title: "Job title", origin: sToday, value: "Principal Engineer", key: roleKey, verify: review({ by: "owner", at: "${TODAY}", every: "180d" }), evidence: "human" });
+export const usesTitle2 = decision({ id: "work.usesTitle2", title: "Uses the role", origin: sToday, restsOn: [title2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toMatch(/key:work\.officialRole — K23: new key is close to: key:work\.jobTitle \(0\.\d\d\)/);
+    await edit(dir, "memory/extra.ts", `describe: "official job title held", origin: sToday });`, `describe: "official job title held", origin: sToday, distinctFrom: [titleKey] });`);
+    const after = await gate(dir);
+    expect(after.green, after.out).toBe(true);
+  }, TIMEOUT);
+
+  it("`alfred keys <subject> --like` shows the closest existing keys before a new one is opened", async () => {
+    const dir = await fresh();
+    const list = await alfred(dir, "keys", "work");
+    expect(list.out).toContain("key:work.jobTitle — text · official job title");
+    const like = await alfred(dir, "keys", "work", "--like", "the role written on the contract");
+    expect(like.out).toMatch(/^0\.\d\d  key:work\.jobTitle — official job title/m);
   }, TIMEOUT);
 
   // -- known holes: the gate still says green --

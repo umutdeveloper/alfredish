@@ -18,6 +18,7 @@ import type {
   FromFindingVerify,
   GoalDef,
   IdeaDef,
+  KeyDef,
   ISODate,
   LocalPath,
   Url,
@@ -64,6 +65,14 @@ export const raw = (path: string, locator?: string) => (locator === undefined ? 
 // ---- present tense ----
 
 export const fact = <E extends Evidence>(d: Spec<FactDef<E>>): FactDef<E> => ({ kind: "fact", ...d });
+
+/** A property of a subject; id and title are derived: key({ subject: "ada", name: "budgetCap", … }) is key:ada.budgetCap. */
+export const key = (d: Omit<KeyDef, "kind" | "id" | "title"> & { title?: string }): KeyDef => ({
+  kind: "key",
+  id: `key:${d.subject}.${d.name}`,
+  title: d.title ?? d.describe,
+  ...d,
+});
 export const claim = <E extends Evidence>(d: Spec<ClaimDef<E>>): ClaimDef<E> => ({ kind: "claim", ...d });
 export const decision = <E extends Evidence>(d: Spec<DecisionDef<E>>): DecisionDef<E> => ({ kind: "decision", ...d });
 export const account = <E extends Evidence>(d: Spec<AccountDef<E>>): AccountDef<E> => ({ kind: "account", ...d });

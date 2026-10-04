@@ -40,6 +40,8 @@ export function valueOf(d: Def): string {
       return d.question;
     case "session":
       return d.topic;
+    case "key":
+      return `${d.valueType} · ${d.describe}`;
   }
 }
 

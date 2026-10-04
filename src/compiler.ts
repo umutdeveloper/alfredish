@@ -41,7 +41,7 @@ type Outcome = { status: Status; reason?: string };
 type Probes = ReadonlyMap<ProbeVerify, Promise<Outcome>>;
 
 const PRESENT = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule"]);
-const KINDS = new Set([...PRESENT, "session", "event", "research"]);
+const KINDS = new Set([...PRESENT, "session", "event", "research", "key"]);
 const ROOTS = new Set(["decision", "claim", "goal", "promise", "rule", "asset", "idea"]);
 const RANK: Record<Status, number> = { green: 0, yellow: 1, unknown: 2, red: 3 };
 
@@ -98,6 +98,8 @@ function children(d: Def): Def[] {
   if (d.kind === "promise" && typeof d.due !== "string") out.push(...verifyDeps(d.due));
   if (d.kind === "decision" && d.supersedes) out.push(d.supersedes);
   if (d.kind === "event") out.push(...d.affects);
+  if (d.kind === "key") out.push(...(d.distinctFrom ?? []));
+  if (d.kind === "fact" && d.key) out.push(d.key);
   if (d.kind === "fact" && d.parked) out.push(...verifyDeps(d.parked.revisitWhen));
   if (d.kind === "research") for (const f of Object.values(d.findings)) if (f.parked) out.push(...verifyDeps(f.parked.revisitWhen));
   return out;
@@ -418,6 +420,21 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
         if (!usedRaw.has(p)) issues.push({ id: `${d.id}:${p}`, status: "red", rule: "K12", message: "raw data is the source of no finding" });
       }
     }
+  }
+
+  // K22: one present fact per key. K24: a key is one property.
+  const byKey = new Map<string, Def[]>();
+  for (const d of defs) if (d.kind === "fact" && d.key) byKey.set(d.key.id, [...(byKey.get(d.key.id) ?? []), d]);
+  for (const [k, fs] of byKey) {
+    if (fs.length < 2) continue;
+    for (const f of fs) issues.push({ id: f.id, status: "red", rule: "K22", message: `two values for ${k}: ${fs.map((x) => x.id).join(", ")} — change the existing fact, or retire one (K20)` });
+  }
+  const CATCH_ALL = new Set(["summary", "info", "details", "general", "overview", "misc", "other", "data", "notes"]);
+  for (const d of defs) {
+    if (d.kind !== "key") continue;
+    const words = d.name.split(/(?=[A-Z])/).map((w) => w.toLowerCase());
+    const hit = words.find((w) => CATCH_ALL.has(w));
+    if (hit) issues.push({ id: d.id, status: "red", rule: "K24", message: `"${hit}" makes this key a catch-all — split it into one key per property` });
   }
 
   const results = new Map<string, DefResult>();

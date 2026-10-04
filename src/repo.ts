@@ -12,7 +12,8 @@ import { diffSnapshots, snapshot, type DiffLine, type Snapshot } from "./snapsho
 import { bodyHash, parseGenerated, render, type View } from "./views.ts";
 import { typeEscapes } from "./escapes.ts";
 import { looksLikeDef } from "./validate.ts";
-import type { Def, ISODate, ProbeCache, ProbeContext } from "./types.ts";
+import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank, type Embed } from "./similarity.ts";
+import type { Def, ISODate, KeyDef, ProbeCache, ProbeContext } from "./types.ts";
 
 const run = promisify(execFile);
 const PAST = new Set(["session", "event", "research"]);
@@ -119,6 +120,35 @@ export async function checkHistory(snap: Snapshot, today: ISODate, o: RepoOption
     const born = origin ? head[origin] : undefined;
     if (born && born.data["at"] !== today) {
       issues.push({ id, status: "red", rule: "K21", message: `new, but born in ${origin} (${String(born.data["at"])}), which is already committed — use the current session as origin` });
+    }
+  }
+  return issues;
+}
+
+/**
+ * K23: a key new since the last commit must decide, in distinctFrom, every key of the same subject that is at least
+ * KEY_SIMILARITY_THRESHOLD similar. If the model cannot be used, every new key is red: it never passes unseen.
+ */
+export async function checkNewKeys(defs: readonly Def[], o: RepoOptions, embed: () => Promise<Embed> = embedder): Promise<Issue[]> {
+  const head = (await snapshotAt("HEAD", o)) ?? {};
+  const keys = defs.filter((d): d is KeyDef => d.kind === "key");
+  const fresh = keys.filter((k) => !head[k.id]);
+  if (!fresh.length) return [];
+  let e: Embed;
+  try {
+    e = await embed();
+  } catch (err) {
+    return fresh.map((k) => ({ id: k.id, status: "red", rule: "K23", message: `cannot compare keys: ${(err as Error).message}` }));
+  }
+  const issues: Issue[] = [];
+  for (const k of fresh) {
+    const others = keys.filter((x) => x.subject === k.subject && x !== k);
+    const decided = new Set((k.distinctFrom ?? []).map((x) => x.id));
+    const close = (await rank(e, keyText(k), others)).filter((r) => r.score >= KEY_SIMILARITY_THRESHOLD);
+    const open = close.filter((r) => !decided.has(r.key.id));
+    if (open.length) {
+      const list = open.map((r) => `${r.key.id} (${r.score.toFixed(2)})`).join(", ");
+      issues.push({ id: k.id, status: "red", rule: "K23", message: `new key is close to: ${list} — use one of them, or add them to distinctFrom` });
     }
   }
   return issues;

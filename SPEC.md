@@ -79,7 +79,7 @@ A past finding that is still relied on today becomes a present-tense `fact`, lin
 
 | Type | What | Required fields | Rule |
 |---|---|---|---|
-| `key` | A property of a subject that facts state a value of, e.g. `ada.budgetCap` | `subject` (lowerCamelCase), `name` (lowerCamelCase), `valueType` (`amount`, `date`, `text`, `list`, `boolean`, `number`, `url`), `describe` (a few plain words); optional `distinctFrom` (keys it was compared with and is not) | One property only (K24). A new key near an existing one must say it is distinct (K23). No `verify`: a key states nothing about the world. |
+| `key` | A property of a subject that facts state a value of, e.g. `key:ada.budgetCap` (its own id namespace, so it never collides with a definition id) | `subject` (lowerCamelCase), `name` (lowerCamelCase), `valueType` (`amount`, `date`, `text`, `list`, `boolean`, `number`, `url`), `describe` (a few plain words); optional `distinctFrom` (keys it was compared with and is not) | One property only (K24). A new key near an existing one must say it is distinct (K23). No `verify`: a key states nothing about the world. |
 
 A `fact` may name its `key`. One present-tense fact per key (K22): a new value of the same property changes that fact,
 it does not add a second one.
@@ -165,11 +165,12 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   f1, f2 — change the existing fact, or retire one (K20)". This is how a duplicate or a contradiction becomes visible
   without reading any text.
 - **K23 — A new key must be compared with the existing ones:** for a key that is not in the last commit, the keys of
-  the same subject are ranked by meaning similarity (§9.1). Every one at or above **0.75** must be listed in the new key's
+  the same subject are ranked by meaning similarity (§9.1). Every one at or above **0.70** must be listed in the new key's
   `distinctFrom`, otherwise red, showing the candidates with their scores: "new key ada.monthlyLimit is close to
   ada.budgetCap (0.86): use it, or add it to distinctFrom". So the agent cannot open a key without having seen the
-  existing ones, and its decision is recorded and shown to the owner. 0.75 is measured: on 20 renamed updates every
-  existing key scored at least that and ranked first.
+  existing ones, and its decision is recorded and shown to the owner. 0.70 is measured with a margin: on 20 renamed
+  updates the true existing key always ranked first and scored at least 0.764; a lower threshold only means more
+  `distinctFrom` decisions, a missed duplicate costs more.
 - **K24 — A key is one property:** a key `name` made of a catch-all word (`summary`, `info`, `details`, `general`,
   `overview`, `misc`, `other`, `data`, `notes`) is red: "split it into one key per property".
 
