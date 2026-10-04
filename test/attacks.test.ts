@@ -6,7 +6,7 @@
 // the day a change closes the hole — then move it to the caught tests and assert the rule that catches it.
 // (Not `it.fails`: that would also pass when an attack breaks for an unrelated reason.)
 import { describe, it, expect, beforeAll } from "vitest";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { cp, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -75,6 +75,7 @@ import { laptop } from "./infra.ts";
 
 let baseline: string;
 let approvedBaseline: string; // the same memory with a first owner approval signed by a test key (§14)
+let ownerKeys: string; // the test owner's key pair and anchor
 
 async function sh(dir: string, cmd: string, args: string[]): Promise<{ code: number; out: string }> {
   try {
@@ -86,6 +87,17 @@ async function sh(dir: string, cmd: string, args: string[]): Promise<{ code: num
   }
 }
 const git = (dir: string, ...a: string[]) => sh(dir, "git", a);
+/** Runs a command with text on its standard input (the owner answering alfred approve). */
+function shInput(dir: string, cmd: string, args: string[], input: string, env: NodeJS.ProcessEnv = process.env): Promise<{ code: number; out: string }> {
+  return new Promise((done) => {
+    const p = spawn(cmd, args, { cwd: dir, env });
+    let out = "";
+    p.stdout.on("data", (d) => (out += d));
+    p.stderr.on("data", (d) => (out += d));
+    p.on("close", (code) => done({ code: code ?? 1, out }));
+    p.stdin.end(input);
+  });
+}
 const alfred = (dir: string, ...a: string[]) => sh(dir, process.execPath, ["vendor/alfredish/src/cli.ts", ...a]);
 
 /** What the agent runs (`build`, unless told not to), then the commit gate. Green only when both parts say so. */
@@ -147,7 +159,7 @@ beforeAll(async () => {
   const c = await git(baseline, "commit", "-qm", "baseline");
   if (c.code !== 0) throw new Error(`baseline does not commit:\n${c.out}`);
   // A copy with the owner's first approval: every current definition signed by a test key on a test anchor.
-  const keys = await mkdtemp(join(tmpdir(), "alfredish-owner-"));
+  const keys = (ownerKeys = await mkdtemp(join(tmpdir(), "alfredish-owner-")));
   await exec("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "owner", "-f", join(keys, "owner")]);
   await writeFile(join(keys, "anchor.pub"), await readFile(join(keys, "owner.pub"), "utf8"));
   process.env["ALFREDISH_ANCHOR"] = join(keys, "anchor.pub"); // inherited by every gate run
@@ -508,5 +520,26 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toContain("approvals/0001.json — K27: bad signature");
+  }, TIMEOUT);
+
+  it("end to end: the owner approves a change with alfred approve through an ssh-agent, and the memory is green again", async () => {
+    const dir = await freshApproved();
+    await edit(dir, "memory/rules.ts", "Spend at most 1,000 EUR", "Spend at most 1,200 EUR");
+    await because(dir, { "rule.budget": "Umut raised the budget" });
+    await alfred(dir, "build");
+    expect((await gate(dir)).green).toBe(false); // unapproved
+    // An ssh-agent holding the owner's key stands in for the owner's key store (e.g. Secretive).
+    const sock = join(ownerKeys, `agent-${Date.now()}.sock`);
+    await exec("ssh-agent", ["-a", sock]);
+    const env = { ...process.env, SSH_AUTH_SOCK: sock };
+    await exec("ssh-add", [join(ownerKeys, "owner")], { env });
+    // Owner's calls in order: rule.budget, then today's session (which carries the reason). Approve both.
+    const r = await shInput(dir, process.execPath, ["vendor/alfredish/src/cli.ts", "approve", "--agent", sock], "a\na\n", env);
+    expect(r.out).toContain("rule.budget  [rule, changed]");
+    expect(r.out).toContain("why: Umut raised the budget");
+    expect(r.out).toContain("approval 2 signed");
+    const after = await gate(dir);
+    expect(after.out, after.out).toMatch(/^\s*✓/);
+    await exec("ssh-agent", ["-k"], { env: { ...env, SSH_AGENT_PID: "" } }).catch(() => undefined);
   }, TIMEOUT);
 });

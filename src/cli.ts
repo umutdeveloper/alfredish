@@ -10,6 +10,7 @@ import { areaDefs, checkHistory, checkImports, checkNewKeys, checkPast, checkRea
 import { embedder, keyText, rank } from "./similarity.ts";
 import { DEFAULT_ANCHOR, loadApprovals } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
+import { approveInteractive } from "./approve.ts";
 import { snapshot } from "./snapshot.ts";
 import type { Def, ISODate, KeyDef } from "./types.ts";
 import { buildViews } from "./views.ts";
@@ -20,18 +21,20 @@ function today(): ISODate {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` as ISODate;
 }
 
-const USAGE = "usage: alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>] | keys <subject> [--like \"<text>\"]  [--memory memory/index.ts]";
+const USAGE = "usage: alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>] | keys <subject> [--like \"<text>\"] | approve [--agent <ssh-agent socket>]  [--memory memory/index.ts]";
 
 async function main(argv: string[]): Promise<number> {
   const args = [...argv];
   const mi = args.indexOf("--memory");
   const entry = resolve(mi >= 0 ? (args.splice(mi, 2)[1] ?? "") : "memory/index.ts");
+  const ai = args.indexOf("--agent");
+  const agentSocket = ai >= 0 ? args.splice(ai, 2)[1] : process.env["ALFREDISH_AGENT_SOCKET"] ?? process.env["SSH_AUTH_SOCK"];
   const li = args.indexOf("--like");
   const like = li >= 0 ? args.splice(li, 2)[1] : undefined;
   const qi = args.indexOf("--quick");
   const quick = qi >= 0 && args.splice(qi, 1).length > 0;
   const [cmd, arg] = args;
-  if (!cmd || !["check", "build", "hook", "get", "why", "diff", "keys"].includes(cmd) || (["get", "why", "diff", "keys"].includes(cmd) && !arg)) {
+  if (!cmd || !["check", "build", "hook", "get", "why", "diff", "keys", "approve"].includes(cmd) || (["get", "why", "diff", "keys"].includes(cmd) && !arg)) {
     console.error(USAGE);
     return 2;
   }
@@ -96,6 +99,16 @@ async function main(argv: string[]): Promise<number> {
       );
       console.log(formatCheck(report));
       return report.issues.some((i) => i.status === "red") ? 1 : 0;
+    }
+    case "approve": {
+      // §14: run by the owner, from Alfredish installed outside the memory; refuses when the records do not check out.
+      const anchor = process.env["ALFREDISH_ANCHOR"] ?? DEFAULT_ANCHOR;
+      const approvals = await loadApprovals(base, anchor);
+      if (approvals.issues.length) {
+        console.log(approvals.issues.map((i) => `✗ ${i.id} — ${i.rule}: ${i.message}`).join("\n"));
+        return 1;
+      }
+      return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, ...(agentSocket && { agentSocket }) });
     }
     case "keys": {
       const keys = defs.filter((d): d is KeyDef => d.kind === "key" && d.subject === arg);
