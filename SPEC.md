@@ -175,6 +175,19 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 - **K24 — A key is one property:** a key `name` whose last word — the head of an English compound — is a catch-all word
   (`summary`, `info`, `details`, `general`, `overview`, `misc`, `other`, `data`, `notes`) is red: "split it into one key
   per property". `employerSummary` is red; `dataExposureRate` (a rate) is not.
+- **K25 — A test says everything it does:** a memory builds probes only with Alfredish's probe builders (`page`, `http`,
+  `header`, `file`, `git`, `cmd`); a direct `probe(…, fn)` in a memory file is red (checked on syntax trees, like K17).
+  Every builder's description contains all its arguments (`cmd`: `<label> — runs: <command> <args> [expect /re/]`), so a
+  definition's hash (K5, §14) covers what its test really does.
+- **K26 — Owner approval** (§14): a definition whose content differs from what the owner last signed is **unapproved**.
+  Unapproved is shown as yellow with the reason, never as green, and never stops a commit. Something resting on an
+  unapproved definition is unapproved too (K3). A `review`, a `confirm` or a `local()` that the owner has not signed
+  counts as not given at all: a renewal the agent wrote itself cannot lift red.
+- **K27 — Approval records are checked:** every record's signature is valid for a key on the owner's anchor list, and the
+  records form an unbroken chain. A bad signature, an unknown key or a broken chain is red.
+- **K28 — The signed state is the reference:** K5, K20, K21 and K23 compare with the last signed record, not `HEAD`
+  (`HEAD` only until a first record exists), so a commit made past the hook cannot move the reference. The hash of the
+  memory's `vendor/alfredish` copy is part of every record: a changed copy is red until the owner approves it.
 
 ## 8. Statuses
 
@@ -220,7 +233,6 @@ nomic-embed-text-v1.5 (Q4_K_M, Apache-2.0), run in-process with llama.cpp (node-
 application. The text compared is `clustering: <name> — <describe>`; similarity is the cosine of the two vectors. If
 the model is missing, altered (hash mismatch) or cannot run, K23 is red ("cannot compare keys") — it never passes
 unseen.
-
 ## 10. Agent rules (for every agent using Alfredish)
 
 1. At session start run `alfred check`, then read only `NOW.md`. During the session use `alfred check --quick` or
@@ -305,3 +317,33 @@ export const askAccountant = promise({
 4. Existing research documents: each becomes a `research`; every finding is either linked or parked. Unlinkable findings go to the owner as one list ("park or delete?").
 5. Existing session notes and logs: migrated once as `session` + `event`; generated afterwards.
 6. A memory is self-contained and portable (principle 4, K15).
+
+## 14. Owner approval
+
+**Why.** Some truths only the owner knows (a budget, a decision, a rule, that a test checks the right thing). An agent
+can write anything; nothing it writes looks approved until the owner signs exactly that content (K26).
+
+**The anchor.** A list of the owner's SSH public keys in a file only an administrator can write, outside the memory
+(`/etc/alfredish/owner.pub` on macOS and Linux; overridable). Where the private key lives is the owner's choice
+(e.g. a Secure Enclave key that asks for Touch ID on every signature); Alfredish only verifies.
+
+**A record.** `approvals/NNNN.json` in the memory: `{ n, at, base: <hash of the previous record>, alfredish: <hash of
+vendor/alfredish>, approved: { id: hash }, removed: [id], rejected: { id: note }, corrections: { id: note } }`, with a
+detached SSH signature (`ssh-keygen -Y sign`, namespace `alfredish`) in `approvals/NNNN.json.sig`. Verifying needs only
+the public keys and `ssh-keygen`.
+
+**Reasons.** Every definition that differs from the last record carries a one-line reason in the session it was
+changed in (`session({ …, changes: { "<id>": "<why>" } })`); a change without a reason is red.
+
+**`alfred approve`** — run by the owner, in their own terminal; installed outside the memory, writable only by an
+administrator, so editing the memory's copy of Alfredish does not change it. It lists every difference since the last
+record with its reason, in two groups: **your calls** first (decisions, rules, promises, goals, ideas, keys and their
+`distinctFrom` decisions, anything verified by `review` / `confirm` / `cmd`, every `local()`, every removal), then
+**machine-checked** lines (facts, assets, accounts and claims verified by a built-in probe other than `cmd`, each shown
+with its test). Per item: **approve**, **correct** (a note; the agent's next version comes back, shown as the
+difference from its first try), **reject** (it must return to its approved content; red until it does), or **skip**
+(stays unapproved). One signature signs the round. It signs only with a key on the anchor list; with none on this
+machine, nothing is recorded.
+
+**The owner's habit.** Any program can ask the key to sign. The owner signs only while running `alfred approve`
+themselves; a prompt naming another program (e.g. the agent's) is refused.
