@@ -126,8 +126,8 @@ export async function checkHistory(snap: Snapshot, today: ISODate, o: RepoOption
 }
 
 /**
- * K23: a key new since the last commit must decide, in distinctFrom, every key of the same subject that is at least
- * KEY_SIMILARITY_THRESHOLD similar. If the model cannot be used, every new key is red: it never passes unseen.
+ * K23: a key new since the last commit must decide, in distinctFrom, every key of the memory — whatever its subject — that
+ * is at least KEY_SIMILARITY_THRESHOLD similar (agents file one property under different subjects). If the model cannot be used, every new key is red: it never passes unseen.
  */
 export async function checkNewKeys(defs: readonly Def[], o: RepoOptions, embed: () => Promise<Embed> = embedder, reference?: Snapshot): Promise<Issue[]> {
   const head = reference ?? (await snapshotAt("HEAD", o)) ?? {}; // K28
@@ -142,7 +142,7 @@ export async function checkNewKeys(defs: readonly Def[], o: RepoOptions, embed: 
   }
   const issues: Issue[] = [];
   for (const k of fresh) {
-    const others = keys.filter((x) => x.subject === k.subject && x !== k);
+    const others = keys.filter((x) => x !== k);
     // A pair is decided once, from either side: k lists the candidate, or the candidate lists k.
     const decided = (other: KeyDef) => (k.distinctFrom ?? []).some((x) => x.id === other.id) || (other.distinctFrom ?? []).some((x) => x.id === k.id);
     const close = (await rank(e, keyText(k), others)).filter((r) => r.score >= KEY_SIMILARITY_THRESHOLD);

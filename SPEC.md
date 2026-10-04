@@ -164,8 +164,9 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 - **K22 — One value per property:** two present-tense facts with the same `key` are red: "two values for ada.budgetCap:
   f1, f2 — change the existing fact, or retire one (K20)". This is how a duplicate or a contradiction becomes visible
   without reading any text.
-- **K23 — A new key must be compared with the existing ones:** for a key that is not in the last commit, the keys of
-  the same subject are ranked by meaning similarity (§9.1). Every one at or above **0.70** must be decided: listed in the
+- **K23 — A new key must be compared with the existing ones:** for a key that is not in the last commit, all keys of
+  the memory, whatever their subject, are ranked by meaning similarity (§9.1) — agents file one property under
+  different subjects (in a measurement, 6 of 24 duplicates had another subject than the key they repeated). Every one at or above **0.70** must be decided: listed in the
   new key's `distinctFrom`, or listing the new key in its own (a pair is decided once, from either side). Otherwise red,
   showing the candidates with their scores: "new key ada.monthlyLimit is close to
   ada.budgetCap (0.86): use it, or add it to distinctFrom". So the agent cannot open a key without having seen the
@@ -206,7 +207,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 | `alfred diff <a>[..<b>]` | **Meaning-level** difference between two dates or commits | Definition by definition, not line by line |
 | `alfred build` | Generates every view (K6) | Changed files |
 | `alfred hook` | Installs a pre-commit hook in the memory repository: `alfred check` before every commit | Hook path |
-| `alfred keys <subject> [--like "<text>"]` | The subject's keys; with `--like`, the three most similar with their scores (to look before opening a new key) | One line per key |
+| `alfred keys <subject>` / `alfred keys --like "<text>"` | The subject's keys; with `--like`, every key of any subject at or above the K23 threshold, with its score (to look before opening a new key) | One line per key |
 
 **Live probes.** Every probe a run needs starts at once (at most 16 at a time), and each probe runs at most once per run.
 The result of every probe that ran live is cached in `.alfredish-cache.json` at the repository root, keyed by the probe's

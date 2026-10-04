@@ -63,6 +63,12 @@ describe("K23 — a new key must be compared with the existing ones (real model)
     expect(mine?.message).not.toContain("key:ada.launchDate"); // unrelated, below the threshold
   }, 60_000);
 
+  it("a duplicate filed under another subject is caught too", async () => {
+    const elsewhere = key({ subject: "adaFinance", name: "monthlyLimit", valueType: "amount", describe: "most money spent in a month", origin: s1 });
+    const mine = (await checkNewKeys([budgetCap, city, elsewhere], await repo())).find((i) => i.id === "key:adaFinance.monthlyLimit");
+    expect(mine?.message).toMatch(/new key is close to: key:ada\.budgetCap \(0\.\d\d\)/);
+  }, 60_000);
+
   it("a close but different property passes once the decision is written in distinctFrom", async () => {
     const hometown = key({ subject: "umut", name: "hometown", valueType: "text", describe: "town the person grew up in", origin: s1 });
     expect((await checkNewKeys([city, hometown], await repo())).map((i) => i.id)).toContain("key:umut.hometown");

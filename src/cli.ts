@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>]   [--memory memory/index.ts]   (SPEC §9)
+// alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>] | keys | approve   [--memory memory/index.ts]   (SPEC §9)
 import { existsSync } from "node:fs";
 import { chmod, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -8,7 +8,7 @@ import { collect, compile } from "./compiler.ts";
 import { nodeContext } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
 import { areaDefs, checkHistory, checkImports, checkNewKeys, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
-import { embedder, keyText, rank } from "./similarity.ts";
+import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
 import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
 import { approveInteractive } from "./approve.ts";
@@ -22,7 +22,7 @@ function today(): ISODate {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` as ISODate;
 }
 
-const USAGE = "usage: alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>] | keys <subject> [--like \"<text>\"] | approve [--agent <ssh-agent socket>]  [--memory memory/index.ts]";
+const USAGE = "usage: alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>] | keys <subject> | keys --like \"<text>\" | approve [--agent <ssh-agent socket>]  [--memory memory/index.ts]";
 
 async function main(argv: string[]): Promise<number> {
   const args = [...argv];
@@ -35,7 +35,7 @@ async function main(argv: string[]): Promise<number> {
   const qi = args.indexOf("--quick");
   const quick = qi >= 0 && args.splice(qi, 1).length > 0;
   const [cmd, arg] = args;
-  if (!cmd || !["check", "build", "hook", "get", "why", "diff", "keys", "approve"].includes(cmd) || (["get", "why", "diff", "keys"].includes(cmd) && !arg)) {
+  if (!cmd || !["check", "build", "hook", "get", "why", "diff", "keys", "approve"].includes(cmd) || (["get", "why", "diff"].includes(cmd) && !arg) || (cmd === "keys" && !arg && like === undefined)) {
     console.error(USAGE);
     return 2;
   }
@@ -116,13 +116,15 @@ async function main(argv: string[]): Promise<number> {
       return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, ...(agentSocket && { agentSocket }) });
     }
     case "keys": {
-      const keys = defs.filter((d): d is KeyDef => d.kind === "key" && d.subject === arg);
-      if (!like) {
-        console.log(keys.length ? keys.map((k) => `${k.id} — ${k.valueType} · ${k.describe}`).join("\n") : `no keys for ${arg}`);
+      const keys = defs.filter((d): d is KeyDef => d.kind === "key");
+      if (like === undefined) {
+        const mine = keys.filter((k) => k.subject === arg);
+        console.log(mine.length ? mine.map((k) => `${k.id} — ${k.valueType} · ${k.describe}`).join("\n") : `no keys for ${arg}`);
         return 0;
       }
-      const ranked = (await rank(await embedder(), keyText({ name: like, describe: like }), keys)).slice(0, 3);
-      console.log(ranked.length ? ranked.map((r) => `${r.score.toFixed(2)}  ${r.key.id} — ${r.key.describe}`).join("\n") : `no keys for ${arg}`);
+      // Searches every subject, as K23 does: the same property may be filed under another subject.
+      const close = (await rank(await embedder(), keyText({ name: like, describe: like }), keys)).filter((r) => r.score >= KEY_SIMILARITY_THRESHOLD);
+      console.log(close.length ? close.map((r) => `${r.score.toFixed(2)}  ${r.key.id} — ${r.key.describe}`).join("\n") : `no key at or above ${KEY_SIMILARITY_THRESHOLD}`);
       return 0;
     }
     case "diff": {
