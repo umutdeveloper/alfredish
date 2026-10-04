@@ -128,6 +128,15 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 - **K13 — Birth certificate:** a definition without `origin` does not compile. `origin` links to an existing `session`. (Type level.)
 - **K14 — Preconditions:** `goal` and `promise` require `requires` (explicitly `[]` when there are none). Preconditions must be green **today**; if one is red, the goal/promise is red at once, regardless of its deadline. (Type level + compiler.)
 - **K15 — Portability:** locations are typed (`url()` or owner-confirmed `local()`, §3; type level). A memory loads nothing from outside its own folder (its pinned `alfredish` copy included): the TypeScript program built from the memory's `tsconfig.json` is inspected, and any source file outside the folder (other than installed type libraries) is red.
+- **K16 — Type rules also hold at run time:** every promise the type level makes is checked again on the loaded
+  definitions, because type checks can be switched off: a known `kind`; a string `id`; `origin` is a session (K13);
+  a present-tense definition has a `verify` of a known kind and an `evidence` level (K1); `goal` / `promise` have
+  `requires` (K14); a `location` / `where` is `url()` or `local()` (K15); every link points to a definition (K2). A
+  violation is red, names the rule and says the fix (e.g. "rule.x has no verify: give it a test (§5)"); the check never
+  crashes on a malformed definition.
+- **K17 — No type escapes in a memory:** a memory's source files contain no `as any`, `as unknown`, `<any>`, `any`
+  annotations, `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`. Checked structurally on the TypeScript program's syntax
+  trees (like K15), not by text search; red with file and line.
 
 ## 8. Statuses
 
@@ -151,7 +160,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 The result of every probe that ran live is cached in `.alfredish-cache.json` at the repository root, keyed by the probe's
 description; the cache is not memory and is not committed (it belongs in `.gitignore`).
 
-The graph checks — K1-K15, propagation (K3), expiry (K8) — always cover the whole memory. The *scope* only decides which
+The graph checks — K1-K17, propagation (K3), expiry (K8) — always cover the whole memory. The *scope* only decides which
 probes are forced to run live:
 
 - `alfred check`: every probe. The pre-commit hook runs this, so nothing is committed on cached results.
