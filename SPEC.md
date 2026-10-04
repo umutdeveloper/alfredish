@@ -80,7 +80,7 @@ A past finding that is still relied on today becomes a present-tense `fact`, lin
 | Type | What | Required fields | Rule |
 |---|---|---|---|
 | `session` | A working session | `at`, `topic`, `questions` | The session note and log line are generated from it and from the definitions born in it |
-| `event` | Something that happened | `at`, `text`; optional `affects` | Immutable once its day has passed |
+| `event` | Something that happened | `at`, `text`; optional `affects`, `retires` (ids of present-tense definitions removed that day, K20) | Immutable once its day has passed |
 | `research` | A piece of research | `at`, `question`, `findings`, `readWhen`; optional `rawData` | Its readable page is generated from the findings. Immutable once its day has passed |
 
 **Finding:** one result of a research. `text`, optional `value`, optional `source` (URL or a place in `rawData`).
@@ -138,6 +138,20 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   annotations, `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`. Checked with TypeScript's own parser: escapes are
   syntax-tree nodes and the comments the parser attaches to tokens, so text inside strings, templates, regular
   expressions or ordinary comments is never reported. Red with file and line.
+- **K18 — Everything in the memory folder is checked:** every definition exported from any `.ts` file under the memory
+  folder must be reachable from the entry (`memory/index.ts`). One that is not is red: "defined in X but not reachable
+  from the index: export it from the index". Files that export no definitions (helpers) are fine.
+- **K19 — Evidence cannot claim more than the test proves:** the `evidence` level may not be stronger than its
+  verification can give: `probe`, `agentProbe` → `live`; `source` → `source`; `review`, `confirm`, `after` → `human`;
+  `fromFinding` → `research`; `derived` → the weakest evidence among its inputs. Red otherwise, so K4 cannot be passed
+  with a label.
+- **K20 — Nothing disappears silently:** a present-tense definition that is in the last commit and is gone now is red,
+  unless an `event` dated today lists its id in `retires` (its `text` says why). Compared with `HEAD`; once owner
+  approval exists, with the last signed record.
+- **K21 — No back-dating:** a definition that is not in the last commit must be born in a session that is not in the last
+  commit either (the session being written now) or in a session dated today. Red otherwise: "born in s.X, which is
+  already committed: use the current session". Compared with `HEAD`; once owner approval exists, with the last signed
+  record.
 
 ## 8. Statuses
 
@@ -161,7 +175,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 The result of every probe that ran live is cached in `.alfredish-cache.json` at the repository root, keyed by the probe's
 description; the cache is not memory and is not committed (it belongs in `.gitignore`).
 
-The graph checks — K1-K17, propagation (K3), expiry (K8) — always cover the whole memory. The *scope* only decides which
+The graph checks — K1-K21, propagation (K3), expiry (K8) — always cover the whole memory. The *scope* only decides which
 probes are forced to run live:
 
 - `alfred check`: every probe. The pre-commit hook runs this, so nothing is committed on cached results.
