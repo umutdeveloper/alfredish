@@ -46,6 +46,9 @@ describe("K24 — a key is one property", () => {
     const summary = key({ subject: "realtyme", name: "employerSummary", valueType: "text", describe: "about the employer", origin: s1 });
     const r = await compile([summary], { today: "2026-10-02", ctx: fakeCtx() });
     expect(r.issues).toContainEqual(expect.objectContaining({ id: "key:realtyme.employerSummary", rule: "K24" }));
+    const rate = key({ subject: "supabaseApps", name: "dataExposureRate", valueType: "number", describe: "share of apps exposing data", origin: s1 });
+    const ok = await compile([rate], { today: "2026-10-02", ctx: fakeCtx() });
+    expect(ok.issues.filter((i) => i.rule === "K24")).toEqual([]); // "data" is not the head word: a rate is one property
   });
 });
 

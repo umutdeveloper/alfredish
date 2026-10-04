@@ -172,8 +172,9 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   existing ones, and its decision is recorded and shown to the owner. 0.70 is measured with a margin: on 20 renamed
   updates the true existing key always ranked first and scored at least 0.764; a lower threshold only means more
   `distinctFrom` decisions, a missed duplicate costs more.
-- **K24 — A key is one property:** a key `name` made of a catch-all word (`summary`, `info`, `details`, `general`,
-  `overview`, `misc`, `other`, `data`, `notes`) is red: "split it into one key per property".
+- **K24 — A key is one property:** a key `name` whose last word — the head of an English compound — is a catch-all word
+  (`summary`, `info`, `details`, `general`, `overview`, `misc`, `other`, `data`, `notes`) is red: "split it into one key
+  per property". `employerSummary` is red; `dataExposureRate` (a rate) is not.
 
 ## 8. Statuses
 

@@ -433,7 +433,7 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
   for (const d of defs) {
     if (d.kind !== "key") continue;
     const words = d.name.split(/(?=[A-Z])/).map((w) => w.toLowerCase());
-    const hit = words.find((w) => CATCH_ALL.has(w));
+    const hit = CATCH_ALL.has(words[words.length - 1]!) ? words[words.length - 1] : undefined; // the head word decides
     if (hit) issues.push({ id: d.id, status: "red", rule: "K24", message: `"${hit}" makes this key a catch-all — split it into one key per property` });
   }
 
