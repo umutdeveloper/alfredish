@@ -75,6 +75,15 @@ A past finding that is still relied on today becomes a present-tense `fact`, lin
 | `asset` | Something we set up (site, repo, setting, profile, backup) | `on` (an `account`), `desired`, `location` (a `Location`, §3) | the world does not match `desired` (drift, K7) |
 | `rule` | A working rule for the agent | `text`, `appliesTo`; optional `restsOn` (why the rule exists) | verification fails; a dependency is red |
 
+**Vocabulary type:**
+
+| Type | What | Required fields | Rule |
+|---|---|---|---|
+| `key` | A property of a subject that facts state a value of, e.g. `ada.budgetCap` | `subject` (lowerCamelCase), `name` (lowerCamelCase), `valueType` (`amount`, `date`, `text`, `list`, `boolean`, `number`, `url`), `describe` (a few plain words); optional `distinctFrom` (keys it was compared with and is not) | One property only (K24). A new key near an existing one must say it is distinct (K23). No `verify`: a key states nothing about the world. |
+
+A `fact` may name its `key`. One present-tense fact per key (K22): a new value of the same property changes that fact,
+it does not add a second one.
+
 **Past-tense types:**
 
 | Type | What | Required fields | Rule |
@@ -152,6 +161,17 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   commit either (the session being written now) or in a session dated today. Red otherwise: "born in s.X, which is
   already committed: use the current session". Compared with `HEAD`; once owner approval exists, with the last signed
   record.
+- **K22 — One value per property:** two present-tense facts with the same `key` are red: "two values for ada.budgetCap:
+  f1, f2 — change the existing fact, or retire one (K20)". This is how a duplicate or a contradiction becomes visible
+  without reading any text.
+- **K23 — A new key must be compared with the existing ones:** for a key that is not in the last commit, the keys of
+  the same subject are ranked by meaning similarity (§9.1). Every one at or above **0.75** must be listed in the new key's
+  `distinctFrom`, otherwise red, showing the candidates with their scores: "new key ada.monthlyLimit is close to
+  ada.budgetCap (0.86): use it, or add it to distinctFrom". So the agent cannot open a key without having seen the
+  existing ones, and its decision is recorded and shown to the owner. 0.75 is measured: on 20 renamed updates every
+  existing key scored at least that and ranked first.
+- **K24 — A key is one property:** a key `name` made of a catch-all word (`summary`, `info`, `details`, `general`,
+  `overview`, `misc`, `other`, `data`, `notes`) is red: "split it into one key per property".
 
 ## 8. Statuses
 
@@ -170,12 +190,13 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 | `alfred diff <a>[..<b>]` | **Meaning-level** difference between two dates or commits | Definition by definition, not line by line |
 | `alfred build` | Generates every view (K6) | Changed files |
 | `alfred hook` | Installs a pre-commit hook in the memory repository: `alfred check` before every commit | Hook path |
+| `alfred keys <subject> [--like "<text>"]` | The subject's keys; with `--like`, the three most similar with their scores (to look before opening a new key) | One line per key |
 
 **Live probes.** Every probe a run needs starts at once (at most 16 at a time), and each probe runs at most once per run.
 The result of every probe that ran live is cached in `.alfredish-cache.json` at the repository root, keyed by the probe's
 description; the cache is not memory and is not committed (it belongs in `.gitignore`).
 
-The graph checks — K1-K21, propagation (K3), expiry (K8) — always cover the whole memory. The *scope* only decides which
+The graph checks — K1-K24, propagation (K3), expiry (K8) — always cover the whole memory. The *scope* only decides which
 probes are forced to run live:
 
 - `alfred check`: every probe. The pre-commit hook runs this, so nothing is committed on cached results.
@@ -188,6 +209,14 @@ A probe outside the scope still runs live unless the cache holds a result of a r
 younger than 24 hours; that result is used as it is, red included, so it still propagates (K3). So a new, changed, unlooked
 or stale probe is always looked at, and a red result inside the scope still propagates to dependents in other areas. To see
 a fix outside the scope turn green, check its area or run the full check.
+
+### 9.1 Meaning similarity
+
+Used only by K23 and `alfred keys`. A fixed embedding model ships inside alfredish (`models/`, its sha256 pinned):
+nomic-embed-text-v1.5 (Q4_K_M, Apache-2.0), run in-process with llama.cpp (node-llama-cpp); no network, no external
+application. The text compared is `clustering: <name> — <describe>`; similarity is the cosine of the two vectors. If
+the model is missing, altered (hash mismatch) or cannot run, K23 is red ("cannot compare keys") — it never passes
+unseen.
 
 ## 10. Agent rules (for every agent using Alfredish)
 
