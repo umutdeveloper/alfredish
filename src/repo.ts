@@ -143,9 +143,10 @@ export async function checkNewKeys(defs: readonly Def[], o: RepoOptions, embed: 
   const issues: Issue[] = [];
   for (const k of fresh) {
     const others = keys.filter((x) => x.subject === k.subject && x !== k);
-    const decided = new Set((k.distinctFrom ?? []).map((x) => x.id));
+    // A pair is decided once, from either side: k lists the candidate, or the candidate lists k.
+    const decided = (other: KeyDef) => (k.distinctFrom ?? []).some((x) => x.id === other.id) || (other.distinctFrom ?? []).some((x) => x.id === k.id);
     const close = (await rank(e, keyText(k), others)).filter((r) => r.score >= KEY_SIMILARITY_THRESHOLD);
-    const open = close.filter((r) => !decided.has(r.key.id));
+    const open = close.filter((r) => !decided(r.key));
     if (open.length) {
       const list = open.map((r) => `${r.key.id} (${r.score.toFixed(2)})`).join(", ");
       issues.push({ id: k.id, status: "red", rule: "K23", message: `new key is close to: ${list} — use one of them, or add them to distinctFrom` });

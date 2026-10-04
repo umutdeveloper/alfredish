@@ -62,9 +62,8 @@ describe("K23 — a new key must be compared with the existing ones (real model)
   it("a close but different property passes once the decision is written in distinctFrom", async () => {
     const hometown = key({ subject: "umut", name: "hometown", valueType: "text", describe: "town the person grew up in", origin: s1 });
     expect((await checkNewKeys([city, hometown], await repo())).map((i) => i.id)).toContain("key:umut.hometown");
-    const decided = key({ ...hometown, distinctFrom: [city] });
-    const cityDecided = key({ ...city, distinctFrom: [decided] });
-    expect(await checkNewKeys([cityDecided, decided], await repo())).toEqual([]);
+    const decided = key({ ...hometown, distinctFrom: [city] }); // decided once, from one side: enough for both
+    expect(await checkNewKeys([city, decided], await repo())).toEqual([]);
   }, 60_000);
 
   it("if the model cannot be used, every new key is red — it never passes unseen", async () => {

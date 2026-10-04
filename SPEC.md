@@ -165,8 +165,9 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   f1, f2 — change the existing fact, or retire one (K20)". This is how a duplicate or a contradiction becomes visible
   without reading any text.
 - **K23 — A new key must be compared with the existing ones:** for a key that is not in the last commit, the keys of
-  the same subject are ranked by meaning similarity (§9.1). Every one at or above **0.70** must be listed in the new key's
-  `distinctFrom`, otherwise red, showing the candidates with their scores: "new key ada.monthlyLimit is close to
+  the same subject are ranked by meaning similarity (§9.1). Every one at or above **0.70** must be decided: listed in the
+  new key's `distinctFrom`, or listing the new key in its own (a pair is decided once, from either side). Otherwise red,
+  showing the candidates with their scores: "new key ada.monthlyLimit is close to
   ada.budgetCap (0.86): use it, or add it to distinctFrom". So the agent cannot open a key without having seen the
   existing ones, and its decision is recorded and shown to the owner. 0.70 is measured with a margin: on 20 renamed
   updates the true existing key always ranked first and scored at least 0.764; a lower threshold only means more
