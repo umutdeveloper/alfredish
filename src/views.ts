@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import type { Report } from "./compiler.ts";
 import { MARK, valueOf } from "./format.ts";
+import { APPROVAL_PROTOCOL } from "./owner.ts";
 import { describeVerify } from "./snapshot.ts";
 import type { Def, DecisionDef, FactDef, Finding, ISODate, ResearchDef, SessionDef } from "./types.ts";
 
@@ -44,7 +45,8 @@ const byId = <T extends Def>(a: T, b: T) => a.id.localeCompare(b.id);
 const code = (id: string) => `\`${id}\``;
 const list = (items: string[]) => (items.length ? items.join("\n") : "- none");
 
-export function buildViews(defs: readonly Def[], report: Report, today: ISODate): View[] {
+/** `approval`: the memory has owner approval (§14), so AGENTS.md starts with Alfredish's approval protocol. */
+export function buildViews(defs: readonly Def[], report: Report, today: ISODate, o: { approval?: boolean } = {}): View[] {
   const views: View[] = [];
   const of = <K extends Def["kind"]>(k: K) => defs.filter((d): d is Extract<Def, { kind: K }> => d.kind === k).sort(byId);
   const sessions = of("session").sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
@@ -101,7 +103,8 @@ export function buildViews(defs: readonly Def[], report: Report, today: ISODate)
   {
     const rules = of("rule");
     const groups = [...new Set(rules.map((r) => r.appliesTo))].sort();
-    det("AGENTS.md", `# Agent rules\n\n${groups.map((g) => `## ${g}\n${rules.filter((r) => r.appliesTo === g).map((r) => `- ${r.text} (${code(r.id)})`).join("\n")}`).join("\n\n") || "- none"}\n`);
+    const protocol = o.approval ? `## alfredish (owner approval)\n${APPROVAL_PROTOCOL.map((l) => `- ${l}`).join("\n")}\n\n` : "";
+    det("AGENTS.md", `# Agent rules\n\n${protocol}${groups.map((g) => `## ${g}\n${rules.filter((r) => r.appliesTo === g).map((r) => `- ${r.text} (${code(r.id)})`).join("\n")}`).join("\n\n") || "- none"}\n`);
   }
 
   // sessions/<id>.md and log.md

@@ -172,6 +172,7 @@ beforeAll(async () => {
   await writeFile(file, JSON.stringify(record, null, 1));
   const signed = await signFile(file, join(keys, "owner"));
   if (!signed.ok) throw new Error(signed.out);
+  await alfred(approvedBaseline, "build"); // AGENTS.md now carries the approval protocol
   await git(approvedBaseline, "add", "-A");
   const a = await git(approvedBaseline, "commit", "-qm", "first owner approval");
   if (a.code !== 0) throw new Error(`approved baseline does not commit:\n${a.out}`);
@@ -464,6 +465,7 @@ describe.concurrent("attacks against a memory with owner approval (K26-K28)", ()
     expect(y.green).toBe(false);
     expect(y.out).toContain("! rule.budget — K26: unapproved: raised the budget — the owner sees it in alfred approve");
     await git(dir, "add", "-A");
+    expect(y.out).toContain("ask them to run alfred-approve in this folder in their own terminal. Never approve for them.");
     expect((await git(dir, "commit", "-qm", "work in progress")).code).toBe(0); // unapproved never stops a commit
   }, TIMEOUT);
 
@@ -500,6 +502,7 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toContain("vendor/alfredish — K28: the copy of Alfredish changed since the owner's last approval");
+    expect(r.out).toContain("→ 1 item not approved by the owner yet");
   }, TIMEOUT);
 
   it("the past rewritten and committed past the hook is still caught: the signed state is the reference (K28, K5)", async () => {
@@ -541,5 +544,41 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
     const after = await gate(dir);
     expect(after.out, after.out).toMatch(/^\s*✓/);
     await exec("ssh-agent", ["-k"], { env: { ...env, SSH_AGENT_PID: "" } }).catch(() => undefined);
+  }, TIMEOUT);
+
+  it("AGENTS.md carries Alfredish's approval protocol in every memory with approvals, and only there", async () => {
+    const approved = await readFile(join(await freshApproved(), "AGENTS.md"), "utf8");
+    expect(approved).toContain("## alfredish (owner approval)");
+    expect(approved).toContain("Never approve for the owner");
+    expect(await readFile(join(await fresh(), "AGENTS.md"), "utf8")).not.toContain("owner approval");
+  }, TIMEOUT);
+
+  it("end to end: the owner's correction note reaches the agent in the check, and the corrected version goes back to the owner", async () => {
+    const dir = await freshApproved();
+    await edit(dir, "memory/rules.ts", "Spend at most 1,000 EUR", "Spend at most 1,200 EUR");
+    await because(dir, { "rule.budget": "Umut raised the budget" });
+    await alfred(dir, "build");
+    const sock = join(ownerKeys, `agent-c-${Date.now()}.sock`);
+    await exec("ssh-agent", ["-a", sock]);
+    const env = { ...process.env, SSH_AUTH_SOCK: sock };
+    await exec("ssh-add", [join(ownerKeys, "owner")], { env });
+    const approve = () => shInput(dir, process.execPath, ["vendor/alfredish/src/cli.ts", "approve", "--agent", sock], round, env);
+    // The owner corrects the rule and approves the session.
+    let round = "c\nit is 1,100 EUR\na\n";
+    expect((await approve()).out).toContain("approval 2 signed");
+    const noted = await gate(dir);
+    expect(noted.green).toBe(false);
+    expect(noted.out).toContain(`rule.budget — K26: the owner asked for a correction: "it is 1,100 EUR" — rewrite it as the note says`);
+    // The agent follows the note; the new version goes back to the owner with the note shown.
+    await edit(dir, "memory/rules.ts", "Spend at most 1,200 EUR", "Spend at most 1,100 EUR");
+    await edit(dir, "memory/sessions.ts", "Umut raised the budget", "corrected as the owner asked");
+    await alfred(dir, "build");
+    expect((await gate(dir)).out).toContain("! rule.budget — K26: unapproved: corrected as the owner asked");
+    round = "a\na\n";
+    const second = await approve();
+    expect(second.out).toContain("(your note last time: it is 1,100 EUR)");
+    expect(second.out).toContain("approval 3 signed");
+    const after = await gate(dir);
+    expect(after.out, after.out).toMatch(/^\s*✓/);
   }, TIMEOUT);
 });

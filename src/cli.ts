@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>]   [--memory memory/index.ts]   (SPEC §9)
+import { existsSync } from "node:fs";
 import { chmod, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -8,7 +9,7 @@ import { nodeContext } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
 import { areaDefs, checkHistory, checkImports, checkNewKeys, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, keyText, rank } from "./similarity.ts";
-import { DEFAULT_ANCHOR, loadApprovals } from "./approval.ts";
+import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
 import { approveInteractive } from "./approve.ts";
 import { snapshot } from "./snapshot.ts";
@@ -75,7 +76,8 @@ async function main(argv: string[]): Promise<number> {
 
   switch (cmd) {
     case "build": {
-      const changed = await writeViews(buildViews(defs, report, day), snap, repo);
+      const approval = existsSync(join(base, APPROVALS_DIR));
+      const changed = await writeViews(buildViews(defs, report, day, { approval }), snap, repo);
       console.log(changed.length ? changed.map((c) => `written: ${c}`).join("\n") : "no changes");
       return 0;
     }
@@ -89,7 +91,7 @@ async function main(argv: string[]): Promise<number> {
         ...approvals.issues,
         ...(signed ? checkApproval(snap, defs, signed) : []),
         ...(signed ? await checkAlfredishCopy(base, signed) : []),
-        ...(await checkViews(buildViews(defs, report, day), snap, repo)),
+        ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined }), snap, repo)),
         ...(await checkPast(snap, day, repo, reference)),
         ...(await checkImports(repo)),
         ...(await checkTypeEscapes(repo)),
@@ -98,6 +100,9 @@ async function main(argv: string[]): Promise<number> {
         ...(await checkNewKeys(defs, repo, undefined, reference)),
       );
       console.log(formatCheck(report));
+      // Steers any agent, whether or not it read AGENTS.md: approval is the owner's step, never the agent's.
+      const waiting = new Set(report.issues.filter((i) => i.rule === "K26" || i.rule === "K28").map((i) => i.id)).size;
+      if (waiting) console.log(`→ ${waiting} item${waiting === 1 ? "" : "s"} not approved by the owner yet: tell them why, and ask them to run alfred-approve in this folder in their own terminal. Never approve for them.`);
       return report.issues.some((i) => i.status === "red") ? 1 : 0;
     }
     case "approve": {

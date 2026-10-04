@@ -6,6 +6,18 @@ import { hashTree, type ApprovedState } from "./approval.ts";
 import type { Snapshot } from "./snapshot.ts";
 import type { Def } from "./types.ts";
 
+/**
+ * The agent's side of owner approval, written by Alfredish into AGENTS.md of every memory that has approvals/ — the
+ * same in every memory, so no memory has to restate it (and none can weaken it).
+ */
+export const APPROVAL_PROTOCOL: readonly string[] = [
+  "This memory has owner approval (Alfredish §14): nothing you add or change counts as approved until the owner signs that exact content.",
+  "Give every definition you add, change or remove a one-line reason in today's session: `changes: { \"<id>\": \"<why>\" }`. A change without a reason is red.",
+  "Never approve for the owner: do not run `alfred approve` or `alfred-approve`, do not answer its questions, do not ask the owner for a fingerprint, and never write in approvals/. Change vendor/alfredish only by copying a committed Alfredish version the owner asked for; the copy waits for the owner's approval (K28).",
+  "When the check shows unapproved changes, tell the owner how many and why, and ask them to run `alfred-approve` in this folder in their own terminal (not one you started); then check again.",
+  "When the check shows an owner's correction note, rewrite that definition as the note says and give the reason; the new version goes back to the owner. A rejected definition goes back to its approved content.",
+];
+
 /** K28: the approved state as a snapshot, to compare with instead of HEAD. */
 export function referenceSnapshot(state: ApprovedState): Snapshot {
   const out: Snapshot = {};
@@ -52,6 +64,11 @@ export function checkApproval(snap: Snapshot, defs: readonly Def[], state: Appro
     const where = now.data["location"] ?? now.data["where"];
     if (isLocal(where) && JSON.stringify(where) !== JSON.stringify(was?.data["location"] ?? was?.data["where"])) {
       red("a local() path the owner has not signed — it counts only after alfred approve");
+      continue;
+    }
+    const correction = state.corrections.get(id);
+    if (correction && correction.hash === now.hash) {
+      issues.push({ id, status: "yellow", rule: "K26", message: `the owner asked for a correction: "${correction.note}" — rewrite it as the note says` });
       continue;
     }
     if (state.records > 0 && !why.has(id)) {

@@ -345,5 +345,12 @@ difference from its first try), **reject** (it must return to its approved conte
 (stays unapproved). One signature signs the round. It signs only with a key on the anchor list; with none on this
 machine, nothing is recorded.
 
+**The agent's side.** In a memory with `approvals/`, Alfredish writes the approval protocol (`APPROVAL_PROTOCOL`) at
+the top of the generated AGENTS.md, the same in every memory: reasons for every change, never approving for the owner,
+asking the owner to run `alfred approve` in their own terminal, following correction notes. The check repeats the ask
+under its result whenever anything is unapproved, so an agent that never read AGENTS.md is steered too. A correction
+note shows in the check (yellow, K26) until the definition is rewritten; then it is unapproved as usual, and the owner
+sees the note again next to the new version.
+
 **The owner's habit.** Any program can ask the key to sign. The owner signs only while running `alfred approve`
 themselves; a prompt naming another program (e.g. the agent's) is refused.
