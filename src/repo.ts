@@ -239,7 +239,8 @@ export async function checkTypeEscapes(o: RepoOptions): Promise<Issue[]> {
   for (const f of (await tsFiles(dir).catch(() => [] as string[])).sort()) {
     const rel = relative(o.base, f).split(sep).join("/");
     for (const e of typeEscapes(await readFile(f, "utf8"))) {
-      issues.push({ id: `${rel}:${e.line}`, status: "red", rule: "K17", message: `${e.what} — remove the escape and fix the type error it hides` });
+      const k25 = e.what.includes("K25");
+      issues.push({ id: `${rel}:${e.line}`, status: "red", rule: k25 ? "K25" : "K17", message: k25 ? e.what.replace(" (K25: ", " — ").replace(/\)$/, "") : `${e.what} — remove the escape and fix the type error it hides` });
     }
   }
   return issues;

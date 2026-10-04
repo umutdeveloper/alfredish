@@ -201,8 +201,10 @@ export const file = (p: LocalPath | string) => {
 };
 
 /** Runs a command; ok when it exits 0 and (optionally) its output matches. */
+/** K25: the description carries everything the test does, so a definition's hash covers it. */
+const shellWord = (a: string) => (/^[\w@%+=:,./-]+$/.test(a) ? a : JSON.stringify(a));
 export const cmd = (describe: string, command: string, args: string[], expect?: RegExp) =>
-  probe(describe, async (ctx) => {
+  probe(`${describe} — runs: ${[command, ...args].map(shellWord).join(" ")}${expect ? ` expect ${expect}` : ""}`, async (ctx) => {
     const r = await ctx.run(command, args);
     if (r.code !== 0) return { ok: false, detail: `exit ${r.code}` };
     return !expect || expect.test(r.stdout) ? { ok: true } : { ok: false, detail: r.stdout.trim().slice(0, 80) };
@@ -215,7 +217,7 @@ export const git = (repo: string) => ({
       return r.code === 0 && r.stdout.trim() === "" ? { ok: true } : { ok: false, detail: "uncommitted changes" };
     }),
   lastCommitMatches: (re: RegExp, describe: string) =>
-    probe(`git ${repo} last commit ${describe}`, async (ctx) => {
+    probe(`git ${repo} last commit ${describe} (matches ${re})`, async (ctx) => {
       const r = await ctx.run("git", ["log", "-1", "--format=%s"], repo);
       return re.test(r.stdout.trim()) ? { ok: true } : { ok: false, detail: `"${r.stdout.trim()}"` };
     }),

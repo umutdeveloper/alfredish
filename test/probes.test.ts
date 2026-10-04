@@ -72,7 +72,7 @@ describe("probe cache and scope (SPEC §9)", () => {
   it("outside the scope, a fresh green cached result is reused", async () => {
     const c = countingCtx();
     const f = probed("f", "site");
-    const cache: ProbeCache = { "site works": green(hoursAgo(1)) };
+    const cache: ProbeCache = { "site works — runs: site": green(hoursAgo(1)) };
     const r = await compile([f, keep("d", [f])], { today, ctx: c.ctx, now, probeCache: cache, scope: () => false });
     expect(c.runs["site"]).toBeUndefined();
     expect(r.results.get("f")!.status).toBe("green");
@@ -81,14 +81,14 @@ describe("probe cache and scope (SPEC §9)", () => {
   it("without a scope (full check) every probe runs live, cache or not", async () => {
     const c = countingCtx();
     const f = probed("f", "site");
-    await compile([f, keep("d", [f])], { today, ctx: c.ctx, now, probeCache: { "site works": green(hoursAgo(1)) } });
+    await compile([f, keep("d", [f])], { today, ctx: c.ctx, now, probeCache: { "site works — runs: site": green(hoursAgo(1)) } });
     expect(c.runs["site"]).toBe(1);
   });
 
   it("outside the scope, a probe still runs when its cached result is missing, unknown, or older than 24 hours", async () => {
     const c = countingCtx();
     const [f1, f2, f3] = [probed("f1", "new"), probed("f2", "offline"), probed("f3", "stale")];
-    const cache: ProbeCache = { "offline works": { status: "unknown", reason: "could not look", at: hoursAgo(1) }, "stale works": green(hoursAgo(25)) };
+    const cache: ProbeCache = { "offline works — runs: offline": { status: "unknown", reason: "could not look", at: hoursAgo(1) }, "stale works — runs: stale": green(hoursAgo(25)) };
     await compile([f1, f2, f3, keep("d", [f1, f2, f3])], { today, ctx: c.ctx, now, probeCache: cache, scope: () => false });
     expect(c.runs).toEqual({ new: 1, offline: 1, stale: 1 });
   });
@@ -96,10 +96,10 @@ describe("probe cache and scope (SPEC §9)", () => {
   it("outside the scope, a fresh cached red is reused as it is and still propagates", async () => {
     const c = countingCtx();
     const f = probed("f", "site");
-    const cache: ProbeCache = { "site works": { status: "red", reason: "site works: exit 1", at: hoursAgo(1) } };
+    const cache: ProbeCache = { "site works — runs: site": { status: "red", reason: "site works — runs: site: exit 1", at: hoursAgo(1) } };
     const r = await compile([f, keep("d", [f])], { today, ctx: c.ctx, now, probeCache: cache, scope: () => false });
     expect(c.runs["site"]).toBeUndefined();
-    expect(r.results.get("f")!.reasons).toEqual(["site works: exit 1"]);
+    expect(r.results.get("f")!.reasons).toEqual(["site works — runs: site: exit 1"]);
     expect(r.results.get("d")!.status).toBe("red");
   });
 
@@ -109,7 +109,7 @@ describe("probe cache and scope (SPEC §9)", () => {
     const site = fact({ id: "site", key: tk("site", s1), title: "site", origin: s1, value: "x", verify: cmd("site works", "site", []), evidence: "live" });
     const offer = keep("offer", [site, base]);
     const other = probed("other", "other");
-    const cache: ProbeCache = { "github works": green(hoursAgo(1)), "site works": green(hoursAgo(1)), "other works": green(hoursAgo(1)) };
+    const cache: ProbeCache = { "github works — runs: github": green(hoursAgo(1)), "site works — runs: site": green(hoursAgo(1)), "other works — runs: other": green(hoursAgo(1)) };
     await compile([offer, other, keep("d", [other])], { today, ctx: c.ctx, now, probeCache: cache, scope: (d) => d.id === "offer" });
     expect(c.runs).toEqual({ site: 1, github: 1 });
   });
@@ -127,8 +127,8 @@ describe("probe cache and scope (SPEC §9)", () => {
     const [ok, bad] = [probed("ok", "fine"), probed("bad", "broken")];
     const cache: ProbeCache = {};
     await compile([ok, bad, keep("d", [ok, bad])], { today, ctx: c.ctx, now, probeCache: cache });
-    expect(cache["fine works"]).toEqual({ status: "green", at: new Date(now).toISOString() });
-    expect(cache["broken works"]).toMatchObject({ status: "red", reason: "broken works: exit 1" });
+    expect(cache["fine works — runs: fine"]).toEqual({ status: "green", at: new Date(now).toISOString() });
+    expect(cache["broken works — runs: broken"]).toMatchObject({ status: "red", reason: "broken works — runs: broken: exit 1" });
   });
 });
 
@@ -167,7 +167,7 @@ describe("the probe cache file (SPEC §9)", () => {
     const { loadProbeCache, saveProbeCache } = await import("../src/repo.ts");
     const dir = await mkdtemp(join(tmpdir(), "alfredish-cache-"));
     expect(await loadProbeCache(dir)).toEqual({});
-    const cache: ProbeCache = { "site works": { status: "green", at: hoursAgo(1) } };
+    const cache: ProbeCache = { "site works — runs: site": { status: "green", at: hoursAgo(1) } };
     await saveProbeCache(dir, cache);
     expect(await loadProbeCache(dir)).toEqual(cache);
     await writeFile(join(dir, ".alfredish-cache.json"), "{not json");

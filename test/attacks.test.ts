@@ -65,7 +65,7 @@ export const started = event({ id: "event.started", title: "Memory started", ori
 };
 
 // The same header every definition file above starts with, for files an attack adds.
-const EXTRA_HEADER = `import { claim, cmd, decision, fact, key, local, probe, review, asset, url } from "./lang.ts";
+const EXTRA_HEADER = `import { claim, cmd, decision, fact, key, local, review, asset, url } from "./lang.ts";
 import { sOld, sToday } from "./sessions.ts";
 import { laptop } from "./infra.ts";
 `;
@@ -299,6 +299,16 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
     expect(r.out).toMatch(/key:work\.position — K23: new key is close to: key:work\.jobTitle/);
   }, TIMEOUT);
 
+  it("a hand-made test that always passes is caught (K25)", async () => {
+    const dir = await fresh();
+    await addDefs(dir, `import { probe } from "./lang.ts";
+export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipeline is healthy", origin: sToday, restsOn: [], review: "30d", verify: probe("pipeline is green", async () => ({ ok: true })), evidence: "live" });\n`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toMatch(/memory\/extra\.ts:\d+ — K25: imports probe — use page, http, header, file, git or cmd/);
+    expect(r.out).toMatch(/memory\/extra\.ts:\d+ — K25: calls probe/);
+  }, TIMEOUT);
+
   // -- known holes: the gate still says green --
 
   it("HOLE: a local path in free text ($HOME form)", async () => {
@@ -325,13 +335,7 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
-  it("HOLE: a test written to always pass (probe that returns ok)", async () => {
-    const dir = await fresh();
-    await addDefs(dir, `export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipeline is healthy", origin: sToday, restsOn: [], review: "30d", verify: probe("pipeline is green", async () => ({ ok: true })), evidence: "live" });\n`);
-    stillOpen(await gate(dir));
-  }, TIMEOUT);
-
-  it("HOLE: a test written to always pass (command `true`)", async () => {
+  it("HOLE: a command that always passes (`true`) — visible in its description (K25), seen only by owner approval", async () => {
     const dir = await fresh();
     await addDefs(dir, `export const fakeCmd = decision({ id: "work.backups", title: "Backups run every night", origin: sToday, restsOn: [], review: "30d", verify: cmd("a backup exists", "true", []), evidence: "live" });\n`);
     stillOpen(await gate(dir));

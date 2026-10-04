@@ -56,3 +56,21 @@ describe("K17 — type escapes", () => {
     expect(whats(src)).toEqual(["4:as any"]);
   });
 });
+
+describe("K25 — a test says everything it does", () => {
+  it("importing or calling probe is found, also under another name; the word in text is not", () => {
+    const src = [
+      'import { probe as p, cmd } from "./lang.ts";',
+      "const t = probe(\"x\", async () => ({ ok: true }));",
+      'const note = "we never call probe here";',
+    ].join("\n");
+    expect(whats(src)).toEqual(["1:imports probe (K25: use page, http, header, file, git or cmd)", "2:calls probe (K25: use page, http, header, file, git or cmd)"]);
+  });
+
+  it("cmd and git describe everything they run and expect, so the hash covers it", async () => {
+    const { cmd, git } = await import("../src/dsl.ts");
+    expect(cmd("the folder exists", "sh", ["-c", 'test -d "$0/git"', "/x"], /ok/).describe).toBe('the folder exists — runs: sh -c "test -d \\"$0/git\\"" /x expect /ok/');
+    expect(cmd("always", "true", []).describe).toBe("always — runs: true");
+    expect(git(".").lastCommitMatches(/^\d{4}/, "starts with a year").describe).toBe("git . last commit starts with a year (matches /^\\d{4}/)");
+  });
+});
