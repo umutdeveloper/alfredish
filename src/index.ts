@@ -8,4 +8,6 @@ export { snapshot, serialize, diffSnapshots, describeVerify } from "./snapshot.t
 export type { Snapshot, DiffLine } from "./snapshot.ts";
 export { buildViews, parseGenerated, render, bodyHash } from "./views.ts";
 export type { View } from "./views.ts";
-export { checkViews, checkPast, checkImports, writeViews, diff } from "./repo.ts";
+export { checkViews, checkPast, checkImports, checkTypeEscapes, writeViews, diff } from "./repo.ts";
+export { typeEscapes } from "./escapes.ts";
+export { shapeProblems } from "./validate.ts";

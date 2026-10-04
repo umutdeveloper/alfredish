@@ -181,6 +181,34 @@ describe.concurrent("attacks: mistakes the gate must refuse", () => {
     expect(r.out).toContain("Cannot find name 'jobTitleTypo'");
   }, TIMEOUT);
 
+  it("a type rule silenced with `as any` is caught (K16 location, K17 escape)", async () => {
+    const dir = await fresh();
+    await edit(dir, "memory/infra.ts", `location: url("https://example.com/notes")`, `location: "my-laptop-folder" as any`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("K16: location is not url() or local()");
+    expect(r.out).toMatch(/memory\/infra\.ts:\d+ — K17: as any/);
+  }, TIMEOUT);
+
+  it("a definition whose test is silenced with `as any` is caught by name, without a crash (K16, K17)", async () => {
+    const dir = await fresh();
+    await edit(dir, "memory/rules.ts", `text: "Never give investment advice.", verify: ok,`, `text: "Never give investment advice.", verify: undefined as any,`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toContain("rule.noInvestment — K16: verify is missing or not a verification — give it a test");
+    expect(r.out).not.toMatch(/TypeError|ReferenceError/);
+  }, TIMEOUT);
+
+  it("a type error silenced with `@ts-ignore` is caught (K17, and K16 for what it hid)", async () => {
+    const dir = await fresh();
+    await edit(dir, "memory/infra.ts", `export const notes = asset({`, `// @ts-ignore\nexport const notes = asset({`);
+    await edit(dir, "memory/infra.ts", `location: url("https://example.com/notes")`, `location: "my-laptop-folder"`);
+    const r = await gate(dir);
+    expect(r.green).toBe(false);
+    expect(r.out).toMatch(/memory\/infra\.ts:\d+ — K17: @ts-ignore/);
+    expect(r.out).toContain("K16: location is not url() or local()");
+  }, TIMEOUT);
+
   // -- known holes: the gate still says green --
 
   it("HOLE: a local path in free text ($HOME form)", async () => {

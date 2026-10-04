@@ -135,8 +135,9 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   violation is red, names the rule and says the fix (e.g. "rule.x has no verify: give it a test (§5)"); the check never
   crashes on a malformed definition.
 - **K17 — No type escapes in a memory:** a memory's source files contain no `as any`, `as unknown`, `<any>`, `any`
-  annotations, `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`. Checked structurally on the TypeScript program's syntax
-  trees (like K15), not by text search; red with file and line.
+  annotations, `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck`. Checked with TypeScript's own parser: escapes are
+  syntax-tree nodes and the comments the parser attaches to tokens, so text inside strings, templates, regular
+  expressions or ordinary comments is never reported. Red with file and line.
 
 ## 8. Statuses
 

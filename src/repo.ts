@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url";
 import { isDef, type Issue } from "./compiler.ts";
 import { diffSnapshots, snapshot, type DiffLine, type Snapshot } from "./snapshot.ts";
 import { bodyHash, parseGenerated, render, type View } from "./views.ts";
+import { typeEscapes } from "./escapes.ts";
 import type { Def, ISODate, ProbeCache, ProbeContext } from "./types.ts";
 
 const run = promisify(execFile);
@@ -148,6 +149,19 @@ export async function checkImports(o: RepoOptions): Promise<Issue[]> {
     const library = f.split(sep).includes("node_modules");
     if (!inside && !library) {
       issues.push({ id: f, status: "red", rule: "K15", message: "the memory's program loads this file from outside the memory folder" });
+    }
+  }
+  return issues;
+}
+
+/** K17: no type escapes in the memory's own source files (the pinned alfredish copy is not memory). */
+export async function checkTypeEscapes(o: RepoOptions): Promise<Issue[]> {
+  const dir = join(o.base, o.memoryDir);
+  const issues: Issue[] = [];
+  for (const f of (await tsFiles(dir).catch(() => [] as string[])).sort()) {
+    const rel = relative(o.base, f).split(sep).join("/");
+    for (const e of typeEscapes(await readFile(f, "utf8"))) {
+      issues.push({ id: `${rel}:${e.line}`, status: "red", rule: "K17", message: `${e.what} — remove the escape and fix the type error it hides` });
     }
   }
   return issues;

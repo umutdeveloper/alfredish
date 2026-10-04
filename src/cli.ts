@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkImports, checkPast, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkImports, checkPast, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { snapshot } from "./snapshot.ts";
 import type { Def, ISODate } from "./types.ts";
 import { buildViews } from "./views.ts";
@@ -76,6 +76,7 @@ async function main(argv: string[]): Promise<number> {
         ...(await checkViews(buildViews(defs, report, day), snap, repo)),
         ...(await checkPast(snap, day, repo)),
         ...(await checkImports(repo)),
+        ...(await checkTypeEscapes(repo)),
       );
       console.log(formatCheck(report));
       return report.issues.some((i) => i.status === "red") ? 1 : 0;

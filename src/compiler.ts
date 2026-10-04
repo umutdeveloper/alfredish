@@ -1,5 +1,6 @@
 // Alfredish compiler: evaluates every definition and applies the SPEC §7 rules that need no repository.
 import type { Def, Duration, Finding, ISODate, PresentDef, ProbeCache, ProbeContext, ProbeVerify, Status, Verify } from "./types.ts";
+import { looksLikeDef, shapeProblems } from "./validate.ts";
 
 export interface Issue {
   id: string;
@@ -102,20 +103,31 @@ function children(d: Def): Def[] {
   return out;
 }
 
-export function collect(roots: readonly unknown[]): { defs: Def[]; issues: Issue[] } {
+/**
+ * Gathers every definition reachable from the roots. A malformed definition (K16) is reported, kept out of `defs`
+ * and never traversed, so nothing later can crash on it; it is returned in `invalid` for propagation (K3).
+ */
+export function collect(roots: readonly unknown[]): { defs: Def[]; issues: Issue[]; invalid: Map<Def, string[]> } {
   const seen = new Set<Def>();
   const byId = new Map<string, Def>();
   const issues: Issue[] = [];
+  const invalid = new Map<Def, string[]>();
   const visit = (d: Def) => {
-    if (seen.has(d)) return;
+    if (seen.has(d) || invalid.has(d)) return;
+    const problems = shapeProblems(d);
+    if (problems.length) {
+      invalid.set(d, problems);
+      for (const m of problems) issues.push({ id: typeof d.id === "string" ? d.id : "?", status: "red", rule: "K16", message: m });
+      return;
+    }
     seen.add(d);
     const prev = byId.get(d.id);
     if (prev && prev !== d) issues.push({ id: d.id, status: "red", rule: "id", message: "two different definitions share this id" });
     byId.set(d.id, d);
     for (const c of children(d)) visit(c);
   };
-  for (const r of roots) if (isDef(r)) visit(r);
-  return { defs: [...seen], issues };
+  for (const r of roots) if (isDef(r) || looksLikeDef(r)) visit(r as Def);
+  return { defs: [...seen], issues, invalid };
 }
 
 // ---- evaluation ----
@@ -130,6 +142,7 @@ async function runProbe(v: ProbeVerify, ctx: ProbeContext): Promise<Outcome> {
 }
 
 export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext, probes?: Probes): Promise<Outcome> {
+  if (typeof v !== "object" || v === null) return { status: "red", reason: "K16: malformed verification" };
   switch (v.kind) {
     case "probe":
       return (await probes?.get(v)) ?? runProbe(v, ctx);
@@ -149,6 +162,8 @@ export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext, p
       return today >= v.date ? { status: "green" } : { status: "red", reason: `not before ${v.date}` };
     case "derived":
       return { status: "green" }; // inputs are handled by propagation (K3)
+    default:
+      return { status: "red", reason: "K16: malformed verification" };
   }
 }
 
@@ -250,10 +265,10 @@ function ownProbes(d: Def): ProbeVerify[] {
 }
 
 /** The scope's definitions and everything they rest on, conditions included. */
-function chainOf(scope: readonly Def[]): Set<Def> {
+function chainOf(scope: readonly Def[], invalid: ReadonlyMap<Def, unknown>): Set<Def> {
   const out = new Set<Def>();
   const visit = (d: Def) => {
-    if (out.has(d)) return;
+    if (out.has(d) || invalid.has(d)) return;
     out.add(d);
     for (const x of deps(d)) visit(x);
     if (d.kind === "idea") for (const x of verifyDeps(d.verify)) visit(x);
@@ -264,10 +279,10 @@ function chainOf(scope: readonly Def[]): Set<Def> {
 }
 
 /** Starts every probe the run needs at once (at most MAX_PARALLEL running); outside the scope, reuses a fresh real look. */
-function startProbes(defs: readonly Def[], o: CompileOptions): Probes {
+function startProbes(defs: readonly Def[], o: CompileOptions, invalid: ReadonlyMap<Def, unknown>): Probes {
   const owners = new Map<ProbeVerify, Def[]>();
   for (const d of defs) for (const v of ownProbes(d)) owners.set(v, [...(owners.get(v) ?? []), d]);
-  const forced = o.scope ? chainOf(defs.filter(o.scope)) : undefined;
+  const forced = o.scope ? chainOf(defs.filter(o.scope), invalid) : undefined;
   const now = o.now ?? Date.now();
   const queue: (() => void)[] = [];
   let running = 0;
@@ -300,8 +315,8 @@ function startProbes(defs: readonly Def[], o: CompileOptions): Probes {
 }
 
 export async function compile(roots: readonly unknown[], o: CompileOptions): Promise<Report> {
-  const { defs, issues } = collect(roots);
-  const probes = startProbes(defs, o);
+  const { defs, issues, invalid } = collect(roots);
+  const probes = startProbes(defs, o, invalid);
   await Promise.all(probes.values());
   const own = new Map<Def, { status: Status; reasons: string[] }>();
   const doneMap = new Map<Def, boolean>();
@@ -316,6 +331,8 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
   const final = new Map<Def, DefResult>();
   const resolving = new Set<Def>();
   const resolve = (d: Def): DefResult => {
+    const bad = invalid.get(d);
+    if (bad) return { def: d, status: "red", reasons: [`K16: malformed (${bad[0]})`] }; // never traversed, never a result
     const done = final.get(d);
     if (done) return done;
     const mine = own.get(d) ?? { status: "green" as Status, reasons: [] };
@@ -343,7 +360,7 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
   const usedFindings = new Set<Finding>();
   const usedRaw = new Set<string>();
   const markUsed = (d: Def) => {
-    if (used.has(d)) return;
+    if (used.has(d) || invalid.has(d)) return;
     used.add(d);
     if (isPresent(d) && d.verify.kind === "fromFinding") usedFindings.add(d.verify.finding);
     for (const x of deps(d)) markUsed(x);
