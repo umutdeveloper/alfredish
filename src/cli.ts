@@ -57,7 +57,7 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 staged="$(git diff --cached --name-only)"
 for idx in $(find . \\( -name node_modules -o -name vendor -o -name .git \\) -prune -o -path '*/memory/index.ts' -print); do
   m="\${idx%/memory/index.ts}"; m="\${m#./}"
-  if [ "$m" != "." ] && ! printf '%s\\n' "$staged" | grep -q -e "^$m/" -e "^${vendor}/" -e "^package" -e "^node_modules"; then continue; fi
+  if [ "$m" != "." ] && ! printf '%s\\n' "$staged" | grep -q -e "^$m/" -e "^${vendor}/" -e "^approvals/" -e "^package" -e "^node_modules"; then continue; fi
   if [ -f "$m/tsconfig.json" ] && [ -x node_modules/.bin/tsc ]; then node_modules/.bin/tsc -p "$m/tsconfig.json" --noEmit || { echo "typecheck of $m failed: commit stopped"; exit 1; }; fi
   node "${cli}" check --memory "$m/memory/index.ts" || { echo "alfred check of $m is red: commit stopped"; exit 1; }
 done
@@ -115,7 +115,7 @@ done
       report.issues.push(
         ...approvals.issues,
         ...(signed ? checkApproval(snap, defs, signed) : []),
-        ...(signed ? await checkAlfredishCopy(base, signed) : []),
+        ...(signed ? await checkAlfredishCopy(base, signed, process.env["ALFREDISH_ANCHOR"] ?? DEFAULT_ANCHOR) : []),
         ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined, linkedRules: linked }), snap, repo)),
         ...ownerRules(defs, linked),
         ...(await checkPast(snap, day, repo, reference)),

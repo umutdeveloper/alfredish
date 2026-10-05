@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { entriesFor, newScreen, render, step, VENDOR_KEY, type Key } from "./approve-screen.ts";
-import { APPROVALS_DIR, hashTree, readAnchor, recordName, run, sha256, signFile, vendorDir, type ApprovalRecord, type ApprovedState } from "./approval.ts";
+import { APPROVALS_DIR, hashTree, loadApprovals, readAnchor, recordName, run, sha256, sharedCopyRoot, signFile, vendorDir, type ApprovalRecord, type ApprovedState } from "./approval.ts";
 import { diffSnapshots, type Snapshot } from "./snapshot.ts";
 import type { ISODate } from "./types.ts";
 
@@ -324,13 +324,23 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
     console.log(`Not started — nothing shown, nothing signed:\n${lines.map((l) => `✗ ${l}`).join("\n")}`);
     return 1;
   }
+  // A shared copy is approved once for the repository of memories (§9.3), in that repository's own records.
+  const root = sharedCopyRoot(o.base);
+  const repo = root ? await loadApprovals(root, o.anchorPath) : undefined;
+  if (repo?.issues.length) {
+    console.log(repo.issues.map((i) => `✗ ${root}/${i.id} — ${i.rule}: ${i.message}`).join("\n"));
+    return 1;
+  }
+  const repoLast = repo?.state && repo.state.records > 0 ? repo.state.last : undefined;
   const vendor = await hashTree(vendorDir(o.base));
-  const vendorChanged = vendor !== null && vendor !== (o.state?.last?.alfredish ?? null);
+  const approvedCopy = repoLast ? repoLast.alfredish : (o.state?.last?.alfredish ?? null);
+  const vendorChanged = vendor !== null && vendor !== approvedCopy;
   if (!changes.length && !vendorChanged) {
     console.log("Nothing changed since your last approval.");
     return 0;
   }
-  const copy = vendorChanged ? await alfredishCopyInfo(o.base, o.state?.last?.pinned, await installedFrom()) : undefined;
+  const copy = vendorChanged ? await alfredishCopyInfo(o.base, repoLast ? repoLast.pinned : o.state?.last?.pinned, await installedFrom()) : undefined;
+  if (copy && root) copy.lines.unshift("shared by every memory of this repository of memories: this one approval covers them all", "");
   const firstRound = !o.state?.records;
   const answers = tty ? await askOnScreen(changes, copy?.lines, firstRound, o.moved) : await askByLines(changes, copy?.lines, firstRound);
   if (!answers) {
@@ -343,12 +353,23 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
     console.log("Nothing decided — nothing recorded.");
     return 0;
   }
-  const prev = o.state?.records ? await readFile(join(o.base, APPROVALS_DIR, recordName(o.state.records)), "utf8") : undefined;
-  const rec = buildRecord(o.state, o.snap, changes, decisions, o.today, { now: vendor, approve: approveVendor, pinned: copy?.pinned ?? null }, prev);
   console.log("Signing — give your fingerprint only if the prompt names your terminal, not another program.");
-  const r = await writeSigned(o.base, rec, o.anchorPath, o.agentSocket);
-  console.log(r.message);
-  return r.ok ? 0 : 1;
+  let ok = true;
+  if (counted || (approveVendor && !root)) {
+    const prev = o.state?.records ? await readFile(join(o.base, APPROVALS_DIR, recordName(o.state.records)), "utf8") : undefined;
+    const rec = buildRecord(o.state, o.snap, changes, decisions, o.today, { now: vendor, approve: approveVendor && !root, pinned: copy?.pinned ?? null }, prev);
+    const r = await writeSigned(o.base, rec, o.anchorPath, o.agentSocket);
+    console.log(r.message);
+    ok &&= r.ok;
+  }
+  if (approveVendor && root) {
+    const prev = repo?.state?.records ? await readFile(join(root, APPROVALS_DIR, recordName(repo.state.records)), "utf8") : undefined;
+    const rec = buildRecord(repo?.state, {}, [], new Map(), o.today, { now: vendor, approve: true, pinned: copy?.pinned ?? null }, prev);
+    const r = await writeSigned(root, rec, o.anchorPath, o.agentSocket);
+    console.log(`${r.message.replace("approval", "repository approval")} — the shared copy, for every memory of the repository`);
+    ok &&= r.ok;
+  }
+  return ok ? 0 : 1;
 }
 
 type Answers = { decisions: Map<string, Decision>; approveVendor: boolean } | undefined;

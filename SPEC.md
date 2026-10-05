@@ -265,7 +265,9 @@ unseen.
 
 Several memories may share one repository (`<repo>/<name>/memory/index.ts`, each with its own `approvals/` and views)
 and one Alfredish copy at the repository root (`<repo>/vendor/alfredish`): a memory runs on `vendor/alfredish` next to
-it, else on the nearest one above it inside the same repository. Every memory's records pin that shared copy (K28). A
+it, else on the nearest one above it inside the same repository. The shared copy is approved once for the whole repository, in the repository's own `approvals/` at its root (same
+format, same anchor, K27): every memory there checks the copy against that record (K28), and `alfred approve` in any
+memory writes a new copy's approval there — a memory's own records keep only its content. A
 memory may load the shared copy but never another memory's files (K15): it rests on them with a link (§9.2). `alfred
 hook` installs one pre-commit hook for the repository that checks every memory the commit touches — all of them when the
 shared copy or the packages change. `github(repo).isPrivate()` lets a memory test that the repository holding it stays

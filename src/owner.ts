@@ -2,7 +2,8 @@
 // the reference, and the memory's copy of Alfredish is part of it).
 
 import { deps, type Issue } from "./compiler.ts";
-import { hashTree, vendorDir, type ApprovedState } from "./approval.ts";
+import { relative } from "node:path";
+import { hashTree, loadApprovals, sharedCopyRoot, vendorDir, type ApprovedState } from "./approval.ts";
 import { confirmedPaths } from "./paths.ts";
 import type { Snapshot } from "./snapshot.ts";
 import type { Def } from "./types.ts";
@@ -111,9 +112,16 @@ export function checkApproval(snap: Snapshot, defs: readonly Def[], state: Appro
 }
 
 /** K28: the memory's copy of Alfredish must be the one the owner last signed. */
-export async function checkAlfredishCopy(base: string, state: ApprovedState): Promise<Issue[]> {
-  const signed = state.last?.alfredish;
-  if (!signed) return [];
+export async function checkAlfredishCopy(base: string, state: ApprovedState, anchor: string): Promise<Issue[]> {
+  // A shared copy is approved once for the whole repository of memories (§9.3); until a first such record exists, the
+  // memory's own last record still says which copy was approved.
+  const root = sharedCopyRoot(base);
+  const repo = root ? await loadApprovals(root, anchor) : undefined;
+  const issues: Issue[] = (repo?.issues ?? []).map((i) => ({ ...i, id: `${relative(base, root!)}/${i.id}` }));
+  const shared = repo?.state && repo.state.records > 0 ? repo.state.last : undefined;
+  const signed = shared ? shared.alfredish : state.last?.alfredish;
+  if (!signed) return issues;
   const now = await hashTree(vendorDir(base));
-  return now === signed ? [] : [{ id: "vendor/alfredish", status: "red", rule: "K28", message: "the copy of Alfredish changed since the owner's last approval — it counts only after alfred approve" }];
+  if (now !== signed) issues.push({ id: "vendor/alfredish", status: "red", rule: "K28", message: `the copy of Alfredish changed since the owner's last approval${shared ? " for this repository of memories" : ""} — it counts only after alfred approve` });
+  return issues;
 }

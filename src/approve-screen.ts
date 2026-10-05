@@ -15,7 +15,7 @@ const W = {
     start: (n: number) => `First approval: ${n} definitions make up the memory today.`, startWhy: "Approve the memory as it is as your starting point, or look at each definition.",
     moved: (n: number, m: string) => `${n} definitions moved to ${m}`, movedWhy: (m: string) => `each is in ${m}'s owner-signed state, where you approved it; approve their removal here together, or look one by one`,
     machine: (n: number) => `${n} machine-checked changes`, machineWhy: "each is checked by a built-in test that looks at the world (shown below); approve them together, or look one by one",
-    vendor: "the memory's copy of Alfredish", noReason: "(no reason given)", sessionWhy: "the session record: its topic, questions and the reasons above",
+    vendor: "the copy of Alfredish", noReason: "(no reason given)", sessionWhy: "the session record: its topic, questions and the reasons above",
     ops: { "+": "new", "~": "changed", "-": "removed" }, approved: "approved", corrected: "correction", rejected: "rejected", skipped: "skipped",
 } as const;
 

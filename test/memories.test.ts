@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -97,6 +97,70 @@ describe("a repository of memories sharing one Alfredish copy", () => {
     expect(r.code).toBe(1);
     expect(r.out).toContain("AGENTS.md — K31: no rule tells an agent here how to talk to the owner");
     await writeFile(rules, before);
+  }, TIMEOUT);
+});
+
+describe("a shared copy is approved once, for every memory of the repository (§9.3, K28)", () => {
+  let keys: string;
+  const signRecord = async (dir: string, n: number, alfredish: string | null, approved: Record<string, unknown>, prev?: string) => {
+    const { sha256, signFile, recordName } = await import("../src/approval.ts");
+    const rec = { n, at: day, base: prev === undefined ? null : sha256(prev), alfredish, approved, removed: [], rejected: {}, corrections: {} };
+    const text = JSON.stringify(rec, null, 1);
+    await mkdir(join(dir, "approvals"), { recursive: true });
+    await writeFile(join(dir, "approvals", recordName(n)), text);
+    const r = await signFile(join(dir, "approvals", recordName(n)), join(keys, "owner"));
+    if (!r.ok) throw new Error(r.out);
+    return text;
+  };
+  const vendorHash = async () => (await import("../src/approval.ts")).hashTree(join(root, "vendor/alfredish"));
+
+  beforeAll(async () => {
+    keys = await mkdtemp(join(tmpdir(), "alfredish-shared-keys-"));
+    await exec("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "owner", "-f", join(keys, "owner")]);
+    await writeFile(join(keys, "anchor.pub"), await readFile(join(keys, "owner.pub"), "utf8"));
+    process.env["ALFREDISH_ANCHOR"] = join(keys, "anchor.pub");
+    // Each memory signs its own content; the repository signs the shared copy once.
+    for (const m of ["esik", "ada"]) {
+      const snap = JSON.parse(await readFile(join(root, m, "memory/snapshot.json"), "utf8"));
+      await signRecord(join(root, m), 1, null, snap);
+    }
+    await signRecord(root, 1, await vendorHash(), {});
+    for (const m of ["esik", "ada"]) await sh(root, process.execPath, ["vendor/alfredish/src/cli.ts", "build", "--memory", `${m}/memory/index.ts`]);
+  }, TIMEOUT);
+
+  it("both memories accept the copy the repository signed; a change to it is red in both until one new repository record", async () => {
+    for (const m of ["esik", "ada"]) expect((await check(m)).out).toMatch(/^\s*✓/);
+    const f = join(root, "vendor/alfredish/src/format.ts");
+    const before = await readFile(f, "utf8");
+    await writeFile(f, before + "\n// a change to the shared copy\n");
+    for (const m of ["esik", "ada"]) expect((await check(m)).out).toContain("vendor/alfredish — K28: the copy of Alfredish changed since the owner's last approval for this repository of memories");
+    await signRecord(root, 2, await vendorHash(), {}, await readFile(join(root, "approvals/0001.json"), "utf8"));
+    for (const m of ["esik", "ada"]) expect((await check(m)).out).toMatch(/^\s*✓/);
+    await writeFile(f, before);
+    await signRecord(root, 3, await vendorHash(), {}, await readFile(join(root, "approvals/0002.json"), "utf8"));
+  }, TIMEOUT);
+
+  it("alfred approve in any one memory writes the shared copy's approval into the repository's records, not the memory's", async () => {
+    const f = join(root, "vendor/alfredish/src/format.ts");
+    const before = await readFile(f, "utf8");
+    await writeFile(f, before + "\n// another change\n");
+    const sock = join(keys, `agent-${Date.now()}.sock`);
+    await exec("ssh-agent", ["-a", sock]);
+    const env = { ...process.env, SSH_AUTH_SOCK: sock };
+    await exec("ssh-add", [join(keys, "owner")], { env });
+    const r = await new Promise<{ out: string }>((done) => {
+      const p = spawn(process.execPath, [join(root, "vendor/alfredish/src/cli.ts"), "approve", "--agent", sock], { cwd: join(root, "ada"), env });
+      let out = "";
+      p.stdout.on("data", (d) => (out += d));
+      p.stderr.on("data", (d) => (out += d));
+      p.on("close", () => done({ out }));
+      p.stdin.end("y\n");
+    });
+    expect(r.out, r.out).toContain("shared by every memory of this repository of memories");
+    expect(r.out).toContain("repository approval 4 signed");
+    expect(r.out).not.toMatch(/^approval \d+ signed/m); // nothing of ada's own content changed: no record of its own
+    for (const m of ["esik", "ada"]) expect((await check(m)).out, m).toMatch(/^\s*✓/);
+    await writeFile(f, before);
   }, TIMEOUT);
 });
 

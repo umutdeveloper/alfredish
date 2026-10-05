@@ -60,6 +60,15 @@ export function vendorDir(base: string): string {
   }
 }
 
+/**
+ * Where a shared copy of Alfredish is approved: the root of the repository of memories that holds it (§9.3), so one
+ * signature covers every memory there. Undefined when the memory has its own copy (approved in its own records).
+ */
+export function sharedCopyRoot(base: string): string | undefined {
+  const v = vendorDir(base);
+  return v === join(resolve(base), "vendor", "alfredish") ? undefined : dirname(dirname(v));
+}
+
 export const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
 export const recordName = (n: number) => `${String(n).padStart(4, "0")}.json`;
 
