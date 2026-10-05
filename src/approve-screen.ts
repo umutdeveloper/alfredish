@@ -14,6 +14,7 @@ const W = {
     summary: "summary", nothing: "Nothing decided: nothing will be recorded.", signHint: "Signing asks for your fingerprint once. Give it only if the prompt names your terminal.",
     start: (n: number) => `First approval: ${n} definitions make up the memory today.`, startWhy: "Approve the memory as it is as your starting point, or look at each definition.",
     moved: (n: number, m: string) => `${n} definitions moved to ${m}`, movedWhy: (m: string) => `each is in ${m}'s owner-signed state, where you approved it; approve their removal here together, or look one by one`,
+    newKeys: (n: number) => `${n} new keys`, newKeysWhy: "each is the question a definition answers, listed with the keys it was compared with and is not (distinctFrom); approve them together, or look one by one",
     machine: (n: number) => `${n} machine-checked changes`, machineWhy: "each is checked by a built-in test that looks at the world (shown below); approve them together, or look one by one",
     dropped: "dropped as a repeat", kept: "kept", droppedWhy: "it only retells the kept event below (K32): approve to remove it from the memory; it stays in the signed records and in git",
     vendor: "the copy of Alfredish", noReason: "(no reason given)", sessionWhy: "the session record: its topic, questions and the reasons above",
@@ -49,6 +50,9 @@ export function entriesFor(changes: readonly Change[], o: { vendor?: string[]; f
   if (o.firstRound) out.push({ key: "__start", title: w.start(changes.length), sub: "", why: w.startWhy, lines: [], buttons: ["startAll", "startOne"], start: true });
   if (o.vendor) out.push({ key: VENDOR_KEY, title: w.vendor, sub: "", why: "", lines: o.vendor, buttons: ["approve", "skip"] });
   const machine = changes.filter((c) => c.group === "machine");
+  // New keys, offered together (K22, K23): each with its question and its distinctFrom decisions.
+  const keys = changes.filter((c) => c.op === "+" && c.kind === "key");
+  if (keys.length > 1) out.push({ key: "__keys", title: w.newKeys(keys.length), sub: "", why: w.newKeysWhy, lines: keys.flatMap((c) => [`+ ${c.id}`, ...c.shown.map((l) => `    ${l}`)]), buttons: ["approveGroup", "startOne"], start: true, members: keys.map((c) => c.id) });
   // Removals of definitions that moved into another memory, offered together (one step per destination).
   const moved = changes.filter((c) => c.op === "-" && o.moved?.has(c.id));
   for (const dest of [...new Set(moved.map((c) => o.moved!.get(c.id)!))]) {

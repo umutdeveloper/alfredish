@@ -164,6 +164,10 @@ export interface ResearchDef {
   at: ISODate;
   question: string;
   readWhen: string;
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
+  /** K22: the earlier research on the same key this one measures again. */
+  repeats?: ResearchDef;
   rawData: readonly string[];
   findings: Readonly<Record<string, Finding>>;
 }
@@ -237,29 +241,43 @@ export interface KeyDef {
 export type ClaimDependency = FactDef<PublicEvidence> | Exclude<PresentDef, FactDef>;
 
 export interface ClaimDef<E extends Evidence = Evidence> extends Present<"claim", E> {
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
   text: string;
   where: Location;
   restsOn: readonly ClaimDependency[];
 }
 
 export interface DecisionDef<E extends Evidence = Evidence> extends Present<"decision", E> {
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
   restsOn: readonly PresentDef[];
   review: Duration;
   supersedes?: DecisionDef;
 }
 
 export interface PromiseDef<E extends Evidence = Evidence> extends Present<"promise", E> {
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
   owner: Party;
   due: ISODate | Condition;
   requires: readonly PresentDef[]; // K14
+  /** K22: the earlier promise on the same key this one renews (e.g. a yearly renewal). */
+  renews?: PromiseDef;
 }
 
 export interface GoalDef<E extends Evidence = Evidence> extends Present<"goal", E> {
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
   phase: { name: string; ends: ISODate };
   requires: readonly PresentDef[]; // K14
+  /** K22: the earlier goal on the same key this one renews. */
+  renews?: GoalDef;
 }
 
 export interface IdeaDef<E extends Evidence = Evidence> extends Present<"idea", E> {
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
   text: string;
   reason: string;
   basedOn?: readonly PresentDef[]; // counts as use (K12), never propagates
@@ -267,6 +285,8 @@ export interface IdeaDef<E extends Evidence = Evidence> extends Present<"idea", 
 }
 
 export interface AccountDef<E extends Evidence = Evidence> extends Present<"account", E> {
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
   service: string;
   owner: Party;
   login: string;
@@ -274,6 +294,8 @@ export interface AccountDef<E extends Evidence = Evidence> extends Present<"acco
 }
 
 export interface AssetDef<E extends Evidence = Evidence> extends Present<"asset", E> {
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
   /** The account it lives on: in this memory, or another memory's account through a link (§9.2). */
   on: AccountDef | LinkDef;
   desired: string;
@@ -287,6 +309,8 @@ export interface LinkDef<E extends Evidence = Evidence> extends Present<"link", 
 }
 
 export interface RuleDef<E extends Evidence = Evidence> extends Present<"rule", E> {
+  /** The question it answers (K22: two of one kind on one key are red unless the later names the earlier). */
+  key?: KeyDef;
   text: string;
   appliesTo: string;
   restsOn?: readonly PresentDef[];

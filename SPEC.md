@@ -82,7 +82,11 @@ A past finding that is still relied on today becomes a present-tense `fact`, lin
 | `key` | A property of a subject that facts state a value of, e.g. `key:ada.budgetCap` (its own id namespace, so it never collides with a definition id) | `subject` (lowerCamelCase), `name` (lowerCamelCase), `valueType` (`amount`, `date`, `text`, `list`, `boolean`, `number`, `url`), `describe` (a few plain words); optional `distinctFrom` (keys it was compared with and is not) | One property only (K24). A new key near an existing one must say it is distinct (K23). No `verify`: a key states nothing about the world. |
 
 Every `fact` names its `key` (required). One present-tense fact per key (K22): a new value of the same property changes that fact,
-it does not add a second one.
+it does not add a second one. A `decision`, `rule`, `promise`, `goal`, `idea`, `asset`, `account`, `claim` or `research` may
+name a `key` too: the question it answers (`key:ada.monthlySpendCeiling` for a budget-cap rule). Two of one kind on one
+key are a repeat or a contradiction (K22); kinds may share a key on purpose (a rule resting on the decision it serves). A
+later one that takes over from an earlier one names it: a decision `supersedes` it, a promise or goal `renews` it (a
+yearly renewal), a research `repeats` it (the same question measured again).
 
 **Past-tense types:**
 
@@ -166,9 +170,13 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   commit either (the session being written now) or in a session dated today. Red otherwise: "born in s.X, which is
   already committed: use the current session". Compared with `HEAD`; once owner approval exists, with the last signed
   record.
-- **K22 — One value per property:** two present-tense facts with the same `key` are red: "two values for ada.budgetCap:
+- **K22 — One answer per question:** two present-tense facts with the same `key` are red: "two values for ada.budgetCap:
   f1, f2 — change the existing fact, or retire one (K20)". This is how a duplicate or a contradiction becomes visible
-  without reading any text.
+  without reading any text. The same holds for every other kind that names a key, within its kind: two decisions, rules,
+  ideas, assets, accounts or claims on one key are red. A later definition may share its kind's key only when it names the
+  earlier one, so the chain is visible: a decision that `supersedes` another (the superseded one no longer counts); a
+  promise or goal that `renews` another, and only while at most one of them is open (not done); a research that
+  `repeats` another. Different kinds may share a key.
 - **K23 — A new key must be compared with the existing ones:** for a key that is not in the last commit, all keys of
   the memory, whatever their subject, are ranked by meaning similarity (§9.1) — agents file one property under
   different subjects (in a measurement, 6 of 24 duplicates had another subject than the key they repeated). Every one at or above **0.70** must be decided: listed in the
@@ -475,7 +483,8 @@ record with its reason, in two groups: **your calls** first (decisions, rules, p
 with its test). Per item: **approve**, **correct** (a note; the agent's next version comes back, shown as the
 difference from its first try), **reject** (it must return to its approved content; red until it does), or **skip**
 (stays unapproved). In a terminal it is one screen per change — the reason first, buttons chosen with the arrow keys,
-the machine-checked changes also offered together in one step listing each with its test, a summary before the
+the machine-checked changes also offered together in one step listing each with its test, the new keys offered
+together in one step listing each with its question and its `distinctFrom` decisions, a summary before the
 signature; elsewhere plain questions. A new copy of Alfredish (K28) is shown with the commit it
 names, whether its files are exactly that commit's files in the Alfredish source the tool was installed from, and the
 commits since the last approved copy (a record keeps the approved commit as `pinned`). The owner sees everything they sign in full, never shortened: every field of a new or removed

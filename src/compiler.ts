@@ -101,6 +101,9 @@ function children(d: Def): Def[] {
   if (d.kind === "decision" && d.supersedes) out.push(d.supersedes);
   if (d.kind === "event") out.push(...d.affects.filter(isDef), ...(d.distinctFrom ?? []).filter((x): x is EventDef => isDef(x)), ...(d.corrects ? [d.corrects] : []), ...(d.drops ?? []).map((x) => x.repeatOf));
   if (d.kind === "key") out.push(...(d.distinctFrom ?? []));
+  if (d.kind !== "fact" && d.kind !== "key" && d.kind !== "session" && d.kind !== "event" && d.kind !== "link" && d.key) out.push(d.key);
+  if ((d.kind === "promise" || d.kind === "goal") && d.renews) out.push(d.renews);
+  if (d.kind === "research" && d.repeats) out.push(d.repeats);
   if (d.kind === "fact" && d.key) out.push(d.key);
   if (d.kind === "fact" && d.parked) out.push(...verifyDeps(d.parked.revisitWhen));
   if (d.kind === "research") for (const f of Object.values(d.findings)) if (f.parked) out.push(...verifyDeps(f.parked.revisitWhen));
@@ -478,12 +481,37 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     }
   }
 
-  // K22: one present fact per key. K24: a key is one property.
+  // K22: one answer per question — one present fact per key, and within every other kind that names a key, unless the
+  // later one names the earlier (a decision supersedes, a promise or goal renews, a research repeats). K24: one property.
   const byKey = new Map<string, Def[]>();
-  for (const d of defs) if (d.kind === "fact" && d.key) byKey.set(d.key.id, [...(byKey.get(d.key.id) ?? []), d]);
-  for (const [k, fs] of byKey) {
-    if (fs.length < 2) continue;
-    for (const f of fs) issues.push({ id: f.id, status: "red", rule: "K22", message: `two values for ${k}: ${fs.map((x) => x.id).join(", ")} — change the existing fact, or retire one (K20)` });
+  for (const d of defs) {
+    const k = "key" in d && d.key && typeof d.key === "object" ? d.key.id : undefined;
+    if (k) byKey.set(`${d.kind}\0${k}`, [...(byKey.get(`${d.kind}\0${k}`) ?? []), d]);
+  }
+  const PLURAL: Record<string, string> = { research: "research records" };
+  const LINK: Record<string, string> = { decision: "supersedes", promise: "renews", goal: "renews", research: "repeats" };
+  const earlier = (d: Def): Def | undefined =>
+    d.kind === "decision" ? d.supersedes : d.kind === "promise" || d.kind === "goal" ? d.renews : d.kind === "research" ? d.repeats : undefined;
+  for (const [kk, all] of byKey) {
+    const [kind, k] = kk.split("\0") as [string, string];
+    if (all.length < 2) continue;
+    if (kind === "fact") {
+      for (const f of all) issues.push({ id: f.id, status: "red", rule: "K22", message: `two values for ${k}: ${all.map((x) => x.id).join(", ")} — change the existing fact, or retire one (K20)` });
+      continue;
+    }
+    const ids = all.map((x) => x.id).join(", ");
+    // A superseded decision no longer counts; a chain is fine when every member but its first names one of the others.
+    const live = kind === "decision" ? all.filter((d) => !all.some((o) => o !== d && earlier(o) === d)) : all;
+    const roots = all.filter((d) => { const e = earlier(d); return !e || !all.includes(e); });
+    const chained = LINK[kind] !== undefined && roots.length === 1 && (kind !== "decision" || live.length === 1);
+    if (!chained) {
+      for (const d of all) issues.push({ id: d.id, status: "red", rule: "K22", message: `two ${PLURAL[kind] ?? `${kind}s`} for ${k}: ${ids} — change the existing one, retire one (K20)${LINK[kind] ? `, or name the earlier in ${LINK[kind]}` : ""}` });
+      continue;
+    }
+    if (kind === "promise" || kind === "goal") {
+      const open = all.filter((d) => !doneMap.get(d));
+      if (open.length > 1) for (const d of all) issues.push({ id: d.id, status: "red", rule: "K22", message: `two open ${kind}s for ${k}: ${ids} — only one may be open; finish the earlier one first` });
+    }
   }
   const CATCH_ALL = new Set(["summary", "info", "details", "general", "overview", "misc", "other", "data", "notes"]);
   for (const d of defs) {

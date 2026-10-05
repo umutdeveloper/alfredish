@@ -73,6 +73,10 @@ export function shapeProblems(x: unknown): string[] {
   if ((d["id"] as string).trim() === "") out.push("id is empty");
   str("title");
   if (kind !== "session" && !isDefOf(d["origin"], new Set(["session"]))) out.push(`origin is not a session — ${FIX.origin}`);
+  // K22: a key on the other kinds, and the chain a later one names (supersedes is checked with decisions).
+  if (kind !== "fact" && kind !== "key" && d["key"] !== undefined && !isDefOf(d["key"], new Set(["key"]))) out.push("key must be a key — build it with key()");
+  if (d["renews"] !== undefined && !((kind === "promise" || kind === "goal") && isDefOf(d["renews"], new Set([kind])))) out.push(kind === "goal" ? "renews must be a goal" : "renews must be a promise");
+  if (d["repeats"] !== undefined && !(kind === "research" && isDefOf(d["repeats"], new Set(["research"])))) out.push("repeats must be a research");
   if (PRESENT.has(kind)) {
     out.push(...verifyProblems(d["verify"], "verify", kind === "idea"));
     if (!EVIDENCE.has(d["evidence"] as string)) out.push(`evidence is missing or unknown — ${FIX.evidence}`);
