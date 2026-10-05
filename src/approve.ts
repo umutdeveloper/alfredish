@@ -29,6 +29,8 @@ export interface Change {
   note?: string;
   /** What the owner signs, never shortened: every field of a new or removed definition, every changed field. */
   shown: string[];
+  /** Set when the only difference is a key the definition did not have (K22): offered together with the others like it. */
+  keyOnly?: { key: string; title: string };
 }
 
 const show = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v));
@@ -142,6 +144,11 @@ export function changesSince(state: ApprovedState | undefined, snap: Snapshot, m
     const data = snap[d.id]?.data;
     const c: Change = { id: d.id, op: d.op, kind: d.kind, group: groupOf(d.op, d.kind, data), detail: d.detail, shown: shownFor(d.op, approved[d.id]?.data, data, marks) };
     if (data && c.group === "machine") c.test = String(data["verify"] ?? "");
+    const was = approved[d.id]?.data;
+    if (d.op === "~" && data && was && was["key"] === undefined && typeof data["key"] === "string") {
+      const fields = [...new Set([...Object.keys(was), ...Object.keys(data)])].filter((f) => JSON.stringify(was[f]) !== JSON.stringify(data[f]));
+      if (fields.length === 1 && fields[0] === "key") c.keyOnly = { key: String(data["key"]).replace(/^@/, ""), title: String(data["title"] ?? d.id) };
+    }
     const w = why.get(d.id);
     if (w) c.why = w;
     const note = state?.corrections.get(d.id)?.note;
@@ -377,7 +384,8 @@ type Answers = { decisions: Map<string, Decision>; approveVendor: boolean } | un
 async function askOnScreen(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean, moved?: ReadonlyMap<string, string>, dropped?: ReadonlyMap<string, ShownDrop>): Promise<Answers> {
   const screen = newScreen(entriesFor(changes, { firstRound, ...(vendorLines && { vendor: vendorLines }), ...(moved && { moved }), ...(dropped && { dropped }) }));
   const out = process.stdout;
-  const draw = () => out.write(`\x1b[H\x1b[2J${render(screen)}`);
+  const draw = () => out.write(`\x1b[H\x1b[2J${render(screen, { rows: out.rows || 40, cols: out.columns || 100 })}`);
+  out.on("resize", draw);
   emitKeypressEvents(process.stdin);
   process.stdin.setRawMode(true);
   out.write("\x1b[?1049h\x1b[?25l");

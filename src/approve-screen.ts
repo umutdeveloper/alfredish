@@ -14,6 +14,8 @@ const W = {
     summary: "summary", nothing: "Nothing decided: nothing will be recorded.", signHint: "Signing asks for your fingerprint once. Give it only if the prompt names your terminal.",
     start: (n: number) => `First approval: ${n} definitions make up the memory today.`, startWhy: "Approve the memory as it is as your starting point, or look at each definition.",
     moved: (n: number, m: string) => `${n} definitions moved to ${m}`, movedWhy: (m: string) => `each is in ${m}'s owner-signed state, where you approved it; approve their removal here together, or look one by one`,
+    keyed: (n: number) => `${n} definitions got their key`, keyedWhy: "nothing else changed in them: each now names the question it answers (K22); approve them together, or look one by one",
+    scrollHint: (a: number, b: number, n: number) => `lines ${a}-${b} of ${n} · shift+↑↓ or PgUp/PgDn to scroll`,
     newKeys: (n: number) => `${n} new keys`, newKeysWhy: "each is the question a definition answers, listed with the keys it was compared with and is not (distinctFrom); approve them together, or look one by one",
     machine: (n: number) => `${n} machine-checked changes`, machineWhy: "each is checked by a built-in test that looks at the world (shown below); approve them together, or look one by one",
     dropped: "dropped as a repeat", kept: "kept", droppedWhy: "it only retells the kept event below (K32): approve to remove it from the memory; it stays in the signed records and in git",
@@ -52,6 +54,8 @@ export function entriesFor(changes: readonly Change[], o: { vendor?: string[]; f
   const machine = changes.filter((c) => c.group === "machine");
   // New keys, offered together (K22, K23): each with its question and its distinctFrom decisions.
   const keys = changes.filter((c) => c.op === "+" && c.kind === "key");
+  const keyed = changes.filter((c) => c.keyOnly);
+  if (keyed.length > 1) out.push({ key: "__keyed", title: w.keyed(keyed.length), sub: "", why: w.keyedWhy, lines: keyed.map((c) => `~ ${c.id} — ${c.keyOnly!.title} → ${c.keyOnly!.key}`), buttons: ["approveGroup", "startOne"], start: true, members: keyed.map((c) => c.id) });
   if (keys.length > 1) out.push({ key: "__keys", title: w.newKeys(keys.length), sub: "", why: w.newKeysWhy, lines: keys.flatMap((c) => [`+ ${c.id}`, ...c.shown.map((l) => `    ${l}`)]), buttons: ["approveGroup", "startOne"], start: true, members: keys.map((c) => c.id) });
   // Removals of definitions that moved into another memory, offered together (one step per destination).
   const moved = changes.filter((c) => c.op === "-" && o.moved?.has(c.id));
@@ -90,9 +94,11 @@ export interface Screen {
   decisions: Map<string, Decision>;
   /** Keys a group step decided: moving on skips them, and nothing else (every other entry is still shown). */
   grouped: Set<string>;
+  /** The first body line shown when the screen is taller than the terminal. */
+  scroll: number;
 }
 
-export const newScreen = (entries: Entry[]): Screen => ({ entries, cur: 0, sel: 0, mode: "browse", note: "", decisions: new Map(), grouped: new Set() });
+export const newScreen = (entries: Entry[]): Screen => ({ entries, cur: 0, sel: 0, mode: "browse", note: "", decisions: new Map(), grouped: new Set(), scroll: 0 });
 
 /** A key as Node's readline reports it. */
 export interface Key {
@@ -100,6 +106,7 @@ export interface Key {
   sequence?: string;
   ctrl?: boolean;
   meta?: boolean;
+  shift?: boolean;
 }
 
 const SUMMARY_BUTTONS: Button[] = ["sign", "back", "quit"];
@@ -113,6 +120,7 @@ function buttonsOf(s: Screen): Button[] {
 
 function advance(s: Screen): void {
   s.sel = 0;
+  s.scroll = 0;
   let next = s.cur + 1;
   while (next < s.entries.length && s.grouped.has(s.entries[next]!.key)) next++;
   if (next < s.entries.length) s.cur = next;
@@ -189,6 +197,15 @@ export function step(s: Screen, k: Key): Screen {
   }
   if (s.mode !== "browse" && s.mode !== "summary") return s;
   const n = buttonsOf(s).length;
+  const PAGE = 10;
+  if (k.shift && (k.name === "down" || k.name === "up")) {
+    s.scroll = Math.max(0, s.scroll + (k.name === "down" ? 1 : -1));
+    return s;
+  }
+  if (k.name === "pagedown" || k.name === "pageup") {
+    s.scroll = Math.max(0, s.scroll + (k.name === "pagedown" ? PAGE : -PAGE));
+    return s;
+  }
   switch (k.name) {
     case "right":
     case "tab":
@@ -204,6 +221,7 @@ export function step(s: Screen, k: Key): Screen {
       if (s.mode === "summary") s.mode = "browse";
       else if (s.cur > 0) s.cur--;
       s.sel = 0;
+      s.scroll = 0;
       break;
     case "return":
     case "enter":
@@ -233,36 +251,55 @@ function dots(s: Screen): string {
     .join(" ");
 }
 
-/** The whole screen as text (with terminal colours). */
-export function render(s: Screen): string {
+const visible = (t: string) => t.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").length;
+
+/** The whole screen as text (with terminal colours). Given the terminal's size, a body taller than it scrolls. */
+export function render(s: Screen, size?: { rows: number; cols: number }): string {
+  const { head, body, foot } = parts(s);
+  if (!size) return [...head, ...body, ...foot].join("\n");
+  const rowsOf = (ls: readonly string[]) => ls.reduce((n, l) => n + Math.max(1, Math.ceil(visible(l) / Math.max(1, size.cols))), 0);
+  if (rowsOf(head) + rowsOf(body) + rowsOf(foot) <= size.rows) return [...head, ...body, ...foot].join("\n");
+  const avail = Math.max(1, size.rows - rowsOf(head) - rowsOf(foot) - 1);
+  // The last start that still shows the end; scrolling never runs past it.
+  let maxStart = body.length;
+  for (let used = 0; maxStart > 0 && used + rowsOf([body[maxStart - 1]!]) <= avail; maxStart--) used += rowsOf([body[maxStart - 1]!]);
+  s.scroll = Math.min(Math.max(0, s.scroll), maxStart);
+  const shown: string[] = [];
+  for (let i = s.scroll, used = 0; i < body.length && used + rowsOf([body[i]!]) <= avail; i++) {
+    shown.push(body[i]!);
+    used += rowsOf([body[i]!]);
+  }
+  const hint = DIM(W.scrollHint(s.scroll + 1, s.scroll + shown.length, body.length));
+  return [...head, ...shown, hint, ...foot].join("\n");
+}
+
+/** The screen in three parts: what stays at the top, the body that may scroll, and the buttons at the bottom. */
+function parts(s: Screen): { head: string[]; body: string[]; foot: string[] } {
   const w = W;
   const real = s.entries.filter((e) => !e.start);
-  const out: string[] = [];
   const buttons = (bs: Button[]) => bs.map((b, i) => (i === s.sel ? INV(w[b]) : `[ ${w[b]} ]`)).join("  ");
   if (s.mode === "summary") {
-    out.push(`${B("alfred-approve")} · ${w.summary}   ${dots(s)}`, "");
+    const body: string[] = [];
     const decided = real.filter((e) => s.decisions.has(e.key) && s.decisions.get(e.key)!.kind !== "skip");
     for (const e of real) {
       const d = s.decisions.get(e.key);
-      if (!d || d.kind === "skip") out.push(DIM(`· ${e.title} — ${w.skipped}`));
-      else if (d.kind === "approve") out.push(`\x1b[32m✓\x1b[0m ${e.title} — ${w.approved}`);
-      else if (d.kind === "correct") out.push(`\x1b[33m✎\x1b[0m ${e.title} — ${w.corrected}: ${d.note}`);
-      else out.push(`\x1b[31m✗\x1b[0m ${e.title} — ${w.rejected}${d.note ? `: ${d.note}` : ""}`);
+      if (!d || d.kind === "skip") body.push(DIM(`· ${e.title} — ${w.skipped}`));
+      else if (d.kind === "approve") body.push(`\x1b[32m✓\x1b[0m ${e.title} — ${w.approved}`);
+      else if (d.kind === "correct") body.push(`\x1b[33m✎\x1b[0m ${e.title} — ${w.corrected}: ${d.note}`);
+      else body.push(`\x1b[31m✗\x1b[0m ${e.title} — ${w.rejected}${d.note ? `: ${d.note}` : ""}`);
     }
-    out.push("", decided.length ? w.signHint : w.nothing, "", buttons(buttonsOf(s)), "", DIM(w.keys));
-    return out.join("\n");
+    return { head: [`${B("alfred-approve")} · ${w.summary}   ${dots(s)}`, ""], body, foot: ["", decided.length ? w.signHint : w.nothing, "", buttons(buttonsOf(s)), "", DIM(w.keys)] };
   }
   const e = s.entries[s.cur]!;
   const pos = e.start ? "" : ` · ${real.indexOf(e) + 1} / ${real.length}`;
-  out.push(`${B("alfred-approve")}${pos}   ${dots(s)}`, "");
-  out.push(`${B(e.title)}${e.sub ? DIM(` · ${e.sub}`) : ""}`);
-  if (e.why) out.push("", `${DIM(w.why + ":")} ${e.why}`);
-  if (e.lines.length) out.push("", ...e.lines);
-  out.push("");
+  // The reason stays on top; only the change's own lines scroll.
+  const head = [`${B("alfred-approve")}${pos}   ${dots(s)}`, "", `${B(e.title)}${e.sub ? DIM(` · ${e.sub}`) : ""}`, ...(e.why ? ["", `${DIM(w.why + ":")} ${e.why}`] : []), ...(e.lines.length ? [""] : [])];
+  const body = [...e.lines];
+  const foot = [""];
   if (s.mode === "note") {
-    out.push(s.noteFor === "correct" ? w.noteCorrect : w.noteReject, `> ${s.note}█`);
-    if (s.error) out.push(`\x1b[31m${w.noteEmpty}\x1b[0m`);
-    out.push("", DIM(w.keysNote));
-  } else out.push(buttons(e.buttons), "", DIM(w.keys));
-  return out.join("\n");
+    foot.push(s.noteFor === "correct" ? w.noteCorrect : w.noteReject, `> ${s.note}█`);
+    if (s.error) foot.push(`\x1b[31m${w.noteEmpty}\x1b[0m`);
+    foot.push("", DIM(w.keysNote));
+  } else foot.push(buttons(e.buttons), "", DIM(w.keys));
+  return { head, body, foot };
 }

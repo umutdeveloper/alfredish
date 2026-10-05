@@ -86,7 +86,9 @@ it does not add a second one. A `decision`, `rule`, `promise`, `goal`, `idea`, `
 name a `key` too: the question it answers (`key:ada.monthlySpendCeiling` for a budget-cap rule). Two of one kind on one
 key are a repeat or a contradiction (K22); kinds may share a key on purpose (a rule resting on the decision it serves). A
 later one that takes over from an earlier one names it: a decision `supersedes` it, a promise or goal `renews` it (a
-yearly renewal), a research `repeats` it (the same question measured again).
+yearly renewal), a research `repeats` it (the same question measured again). A research takes its key the day it is written: once its
+day has passed it cannot change (K5), so a past research stays without one — the present-tense definitions resting on
+it carry its question.
 
 **Past-tense types:**
 
