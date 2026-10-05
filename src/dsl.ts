@@ -81,9 +81,9 @@ export const account = <E extends Evidence>(d: Spec<AccountDef<E>>): AccountDef<
 export const asset = <E extends Evidence>(d: Spec<AssetDef<E>>): AssetDef<E> => ({ kind: "asset", ...d });
 export const rule = <E extends Evidence>(d: Spec<RuleDef<E>>): RuleDef<E> => ({ kind: "rule", ...d });
 /** §9.2: rest on another memory's definition as its owner signed it (`alfred link <memory> <id>` prints hash and evidence). */
-export const link = <E extends Evidence>(d: { id: string; title: string; origin: SessionDef; memory: string; target: string; hash: string; evidence: E }): LinkDef<E> => ({
+export const link = <E extends Evidence>(d: { id: string; title: string; origin: SessionDef; memory: string; target: string; kind: string; hash: string; evidence: E }): LinkDef<E> => ({
   kind: "link", id: d.id, title: d.title, origin: d.origin, memory: d.memory, target: d.target, evidence: d.evidence,
-  verify: { kind: "linked", memory: d.memory, target: d.target, hash: d.hash, evidence: d.evidence },
+  verify: { kind: "linked", memory: d.memory, target: d.target, targetKind: d.kind, hash: d.hash, evidence: d.evidence },
 });
 
 export const promise = <E extends Evidence>(

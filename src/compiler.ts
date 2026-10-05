@@ -170,6 +170,7 @@ export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext, p
       const r = await ctx.signed(v.memory, v.target, v.hash);
       if ("why" in r) return { status: "red", reason: `${at}: ${r.why}` };
       if (r.hash !== v.hash) return { status: "yellow", reason: `${at} changed since it was linked (${changedFields(r.was, r.data)}) — look again, then re-link` };
+      if (r.data["kind"] !== v.targetKind) return { status: "red", reason: `${at}: linked as a ${v.targetKind}, signed as a ${String(r.data["kind"])}` };
       if (r.data["evidence"] !== v.evidence) return { status: "red", reason: `${at}: linked with evidence "${v.evidence}", signed with "${String(r.data["evidence"])}"` };
       return { status: "green" };
     }

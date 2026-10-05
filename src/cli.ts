@@ -73,7 +73,7 @@ done
       console.error(`${arg}:${arg2}: ${r.why}`);
       return 1;
     }
-    console.log(`link({ id: "link.${arg}.${arg2}", title: ${JSON.stringify(String(r.data["title"] ?? arg2))}, origin: <this session>, memory: "${arg}", target: "${arg2}", hash: "${r.hash}", evidence: "${String(r.data["evidence"])}" })`);
+    console.log(`link({ id: "link.${arg}.${arg2}", title: ${JSON.stringify(String(r.data["title"] ?? arg2))}, origin: <this session>, memory: "${arg}", target: "${arg2}", kind: "${String(r.data["kind"])}", hash: "${r.hash}", evidence: "${String(r.data["evidence"])}" })`);
     return 0;
   }
   const ctx = nodeContext(base);

@@ -262,8 +262,9 @@ private.
 ### 9.2 Links to other memories
 
 A memory may rest on a definition of another memory on the same machine with a `link` (`link({ id, title, origin,
-memory, target, hash, evidence })`; `alfred link <memory> <id>` prints the values to write). It pins the target's hash
-and evidence as its owner signed them. The check reads the other memory's **signed state** (its approval records,
+memory, target, kind, hash, evidence })`; `alfred link <memory> <id>` prints the values to write). It pins the target's hash
+kind and evidence as its owner signed them. An asset may live on another memory's account through a link to it
+(`on: <link to an account>`), so a shared account is never copied. The check reads the other memory's **signed state** (its approval records,
 checked against the anchor, K27), never its files, so nothing unsigned there and nothing an agent writes here can make
 a link green:
 

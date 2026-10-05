@@ -35,7 +35,7 @@ function verifyProblems(v: unknown, field: string, onlyConditions = false): stri
   const need = (ok: boolean, what: string) => { if (!ok) out.push(`${field} (${k}): ${what}`); };
   if (k === "probe") need(isStr(v["describe"]) && typeof v["run"] === "function", "needs a description and a test to run");
   if (k === "agentProbe") need(isStr(v["describe"]) && isDuration(v["ttl"]), "needs a description and a ttl like 30d");
-  if (k === "linked") need(isStr(v["memory"]) && isStr(v["target"]) && isStr(v["hash"]) && /^[0-9a-f]{16}$/.test(String(v["hash"])) && EVIDENCE.has(v["evidence"] as string), "needs memory, target, hash (16 hex) and evidence");
+  if (k === "linked") need(isStr(v["memory"]) && isStr(v["target"]) && isStr(v["targetKind"]) && isStr(v["hash"]) && /^[0-9a-f]{16}$/.test(String(v["hash"])) && EVIDENCE.has(v["evidence"] as string), "needs memory, target, kind, hash (16 hex) and evidence");
   if (k === "source") need(isStr(v["url"]) && isDate(v["readAt"]) && isDuration(v["ttl"]), "needs url, readAt (YYYY-MM-DD) and ttl");
   if (k === "fromFinding") need(isObj(v["finding"]) && isDefOf((v["finding"] as Obj)["research"], new Set(["research"])) && isDuration(v["ttl"]), "needs a finding of a research and a ttl");
   if (k === "review") need(v["by"] === "owner" && isDate(v["at"]) && isDuration(v["every"]), 'needs by: "owner", at (YYYY-MM-DD) and every (like 90d)');
@@ -162,7 +162,7 @@ export function shapeProblems(x: unknown): string[] {
       if (!isObj(d["verify"]) || d["verify"]["kind"] !== "linked") out.push("a link is verified by linked() — build it with link()");
       break;
     case "asset":
-      if (!isDefOf(d["on"], new Set(["account"]))) out.push(`on is not an account — ${FIX.link}`);
+      if (!isDefOf(d["on"], new Set(["account"])) && !(isDefOf(d["on"], new Set(["link"])) && isObj((d["on"] as Obj)["verify"]) && ((d["on"] as Obj)["verify"] as Obj)["targetKind"] === "account")) out.push(`on is not an account, nor a link to another memory's account — ${FIX.link}`);
       str("desired");
       out.push(...location(d["location"], "location"));
       break;

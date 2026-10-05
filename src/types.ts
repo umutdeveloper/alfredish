@@ -113,6 +113,8 @@ export interface LinkedVerify {
   hash: string;
   /** The target's evidence when it was linked; checked against the signed content. */
   evidence: Evidence;
+  /** The target's kind (e.g. "account"), checked against the signed content. */
+  targetKind: string;
 }
 
 export type Verify = Condition | AgentProbeVerify | SourceVerify | FromFindingVerify | ReviewVerify | LinkedVerify;
@@ -262,7 +264,8 @@ export interface AccountDef<E extends Evidence = Evidence> extends Present<"acco
 }
 
 export interface AssetDef<E extends Evidence = Evidence> extends Present<"asset", E> {
-  on: AccountDef;
+  /** The account it lives on: in this memory, or another memory's account through a link (§9.2). */
+  on: AccountDef | LinkDef;
   desired: string;
   location: Location;
 }

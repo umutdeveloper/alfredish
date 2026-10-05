@@ -42,8 +42,8 @@ beforeAll(async () => {
 });
 
 const ctx = (): ProbeContext => ({ ...fakeCtx(), signed: (m, id, p) => readSigned(m, id, p, { memoriesFile, anchor: join(keys, "anchor.pub") }) });
-const linked = (hash: string, o: { memory?: string; target?: string; evidence?: "source" | "live" } = {}) =>
-  link({ id: "link.alfred.self.experience", title: "Umut's experience, as signed in Alfred", origin: s, memory: o.memory ?? "alfred", target: o.target ?? "self.experience", hash, evidence: o.evidence ?? "source" });
+const linked = (hash: string, o: { memory?: string; target?: string; evidence?: "source" | "live"; kind?: string } = {}) =>
+  link({ id: "link.alfred.self.experience", title: "Umut's experience, as signed in Alfred", origin: s, memory: o.memory ?? "alfred", target: o.target ?? "self.experience", kind: o.kind ?? "fact", hash, evidence: o.evidence ?? "source" });
 const claimOn = (l: ReturnType<typeof linked>) => decision({ id: "site.experienceText", title: "The site says 13 years", origin: s, restsOn: [l], review: "90d", verify: review({ by: "owner", at: today, every: "90d" }), evidence: "human" });
 const run = async (l: ReturnType<typeof linked>) => {
   const r = await compile([claimOn(l)], { today, ctx: ctx() });
@@ -73,6 +73,15 @@ describe("§9.2 link: resting on another memory's definition as its owner signed
     const r = await run(linked(H2, { evidence: "live" }));
     expect(r.link.status).toBe("red");
     expect(r.link.reasons.join()).toContain('linked with evidence "live", signed with "source"');
+    expect((await run(linked(H2, { kind: "account" }))).link.reasons.join()).toContain("linked as a account, signed as a fact");
+  });
+
+  it("an asset lives on another memory's account through a link, never through a link to something else (K16)", async () => {
+    const { asset, url } = await import("../src/dsl.ts");
+    const github = link({ id: "link.alfred.account.github", title: "GitHub", origin: s, memory: "alfred", target: "account.github", kind: "account", hash: H1, evidence: "live" });
+    const repo = asset({ id: "project.esik", title: "Eşik repo", origin: s, on: github, desired: "exists", location: url("https://github.com/umutdeveloper/esik"), verify: review({ by: "owner", at: today, every: "90d" }), evidence: "human" });
+    expect(shapeProblems(repo)).toEqual([]);
+    expect(shapeProblems({ ...repo, on: linked(H1) })).toContain("on is not an account, nor a link to another memory's account — link only to definitions (import the exported definition)");
   });
 
   it("red when the other memory's records do not check out — an edited record is never read as signed", async () => {
@@ -88,8 +97,8 @@ describe("§9.2 link: resting on another memory's definition as its owner signed
 
   it("is described by everything it pins (K25), and is well-formed only when built with link() (K16)", () => {
     const l = linked(H1);
-    expect(describeVerify(l.verify)).toBe(`linked to alfred:self.experience (signed ${H1}, evidence source)`);
-    expect(shapeProblems({ ...l, verify: { ...l.verify, hash: "nothex" } })).toContain("verify (linked): needs memory, target, hash (16 hex) and evidence");
+    expect(describeVerify(l.verify)).toBe(`linked to alfred:self.experience (fact, signed ${H1}, evidence source)`);
+    expect(shapeProblems({ ...l, verify: { ...l.verify, hash: "nothex" } })).toContain("verify (linked): needs memory, target, kind, hash (16 hex) and evidence");
   });
 
   it("a link nothing rests on is red (K12)", async () => {
