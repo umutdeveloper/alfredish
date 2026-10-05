@@ -207,6 +207,14 @@ export const file = (p: LocalPath | string) => {
       );
       return typeof p === "string" ? v : Object.assign(v, { local: p });
     },
+    contains: (text: string): ProbeVerify => {
+      const v = probe(`file ${path} contains "${text}"`, async (ctx) => {
+        const t = ctx.readText ? await ctx.readText(path) : undefined;
+        if (t === undefined) return { ok: false, detail: "cannot be read" };
+        return t.includes(text) ? { ok: true } : { ok: false, detail: `"${text}" not found` };
+      });
+      return typeof p === "string" ? v : Object.assign(v, { local: p });
+    },
   };
 };
 

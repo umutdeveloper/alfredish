@@ -67,6 +67,9 @@ export function nodeContext(baseDir: string, timeoutMs = 15_000): ProbeContext {
       }
       return p;
     },
+    async readText(path) {
+      return readFile(resolve(baseDir, path), "utf8").catch(() => undefined);
+    },
     async fileExists(path) {
       try {
         await access(resolve(baseDir, path));

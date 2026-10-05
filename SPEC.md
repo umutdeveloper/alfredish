@@ -100,7 +100,7 @@ If not, it is parked explicitly with `parked: { reason, revisitWhen }` (K12).
 
 | Kind | What it does | Example | Run by |
 |---|---|---|---|
-| `probe` | Looks at the world automatically | `page(url).contains(text)`, `http(url).status(200)`, `header(url, name).contains(x)`, `file(local(path)).exists()`, `git(repo).clean()`, `domain(name).expiresOnOrAfter(date)`, `github(repo).exists()` / `.absent()` / `.isPrivate()` / `.lastCommitTouching(path, sha)`, `dns(name, type, { server? }).contains(v)` / `.lacks(v…)`, `git(repo).noRemote()`, `all(...)`, `cmd(...)` | the CLI, in seconds |
+| `probe` | Looks at the world automatically | `page(url).contains(text)`, `http(url).status(200)`, `header(url, name).contains(x)`, `file(local(path)).exists()` / `.contains(text)`, `git(repo).clean()`, `domain(name).expiresOnOrAfter(date)`, `github(repo).exists()` / `.absent()` / `.isPrivate()` / `.lastCommitTouching(path, sha)`, `dns(name, type, { server? }).contains(v)` / `.lacks(v…)`, `git(repo).noRemote()`, `all(...)`, `cmd(...)` | the CLI, in seconds |
 | `agentProbe` | A look that needs a logged-in browser | `agentProbe("dashboard shows the account", "30d", last)` | the agent; result + date are recorded and expire with `ttl` |
 | `source` | Read in a primary source | `source(url, { readAt, ttl: "30d" })` | the agent; red when expired |
 | `fromFinding` | Relies on a research finding | `fromFinding(finding, { ttl: "90d" })` | the compiler; red when expired |
@@ -205,6 +205,12 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   first every time); in a real memory of 103 events, a scan of all 841 pairs at 0.75 found 7 real repeats, conflicts or
   corrections, all between 0.816 and 0.903 — none below 0.80, so 0.78 keeps a margin. About 7 candidates per new event
   (at 0.70 half of all events were candidates).
+- **K30 — No machine path in a memory's text:** every text of every definition is scanned for a path that belongs to one
+  machine (`~/…`, `$HOME/…`, `./…`, `../…`, `C:\…`, `%VAR%\…`, `/Users/…` and other system roots). A path the owner
+  confirmed with `local()` may appear only in a test's description (`verify`, `due`); anywhere else, and any other
+  path, is red. The check first proves itself on every known path form and on ordinary text (a site path, `TCP/IP`) and
+  is red if that proof fails. Memories are carried and pushed; a machine path is wrong on the next machine and leaks
+  the owner's layout.
 
 ## 8. Statuses
 

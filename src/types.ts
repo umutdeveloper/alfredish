@@ -43,6 +43,8 @@ export interface ProbeContext {
   signed?(memory: string, id: string, pinned: string): Promise<SignedLookup>;
   fetchText(url: string): Promise<{ status: number; headers: Headers; body: string }>;
   fileExists(path: string): Promise<boolean>;
+  /** A file's text (a memory file, or an owner-confirmed local path), or undefined when it cannot be read. */
+  readText?(path: string): Promise<string | undefined>;
   run(cmd: string, args: string[], cwd?: string): Promise<{ code: number; stdout: string }>;
 }
 

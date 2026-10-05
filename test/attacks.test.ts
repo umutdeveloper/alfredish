@@ -354,17 +354,15 @@ export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipel
 
   // -- known holes: the gate still says green --
 
-  it("HOLE (without owner approval): a local path in free text ($HOME form)", async () => {
-    const dir = await fresh();
-    await edit(dir, "memory/decisions.ts", "worked in the work folder", "worked in $HOME/work");
-    stillOpen(await gate(dir));
-  }, TIMEOUT);
-
-  it("HOLE (without owner approval): a local path in free text (relative form)", async () => {
-    const dir = await fresh();
-    await edit(dir, "memory/decisions.ts", "worked in the work folder", "worked in ../../work");
-    stillOpen(await gate(dir));
-  }, TIMEOUT);
+  it("a local path in free text is red, in every form (K30)", async () => {
+    for (const path of ["$HOME/work", "../../work", "~/work", "/Users/someone/work"]) {
+      const dir = await fresh();
+      await edit(dir, "memory/decisions.ts", "worked in the work folder", `worked in ${path}`);
+      const r = await gate(dir);
+      expect(r.green, path).toBe(false);
+      expect(r.out).toMatch(/work\.dispatch — K30: title names a path on one machine/);
+    }
+  }, TIMEOUT * 2);
 
   it("HOLE (without owner approval): the agent marks a local path as confirmed by the owner", async () => {
     const dir = await fresh();
