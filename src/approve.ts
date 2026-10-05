@@ -225,6 +225,28 @@ export async function alfredishCopyInfo(base: string, previous: string | null | 
   return { lines, pinned };
 }
 
+/** This tool's own code: the language it reads the memory with. */
+export const TOOL_SRC = fileURLToPath(new URL(".", import.meta.url));
+const PAST_KINDS = new Set(["event", "session", "research"]);
+
+/**
+ * Why this approval round must not start. The screen must read the memory exactly as the check does: with the same
+ * Alfredish code, every definition understood, and never offering to remove the past. An older tool once read three
+ * past events it did not understand as removed.
+ */
+export async function approveBlockers(o: { base: string; invalid: readonly string[]; changes: readonly Change[]; toolSrc?: string }): Promise<string[]> {
+  const out: string[] = [];
+  const mine = await hashTree(o.toolSrc ?? TOOL_SRC);
+  const memory = await hashTree(join(o.base, "vendor", "alfredish", "src"));
+  if (memory !== null && mine !== memory) {
+    const pinned = (await readFile(join(o.base, "vendor", "alfredish", "PINNED"), "utf8").catch(() => "?")).trim();
+    out.push(`this alfred-approve is not the Alfredish this memory uses (${pinned}), so it could misread it — reinstall alfred-approve from that version (sudo sh scripts/install-approve.sh in Alfredish), then run it again`);
+  }
+  if (o.invalid.length) out.push(`${o.invalid.length} definition${o.invalid.length === 1 ? "" : "s"} cannot be read: ${o.invalid.join(", ")} — fix them first (alfred check shows why)`);
+  for (const c of o.changes) if (c.op === "-" && PAST_KINDS.has(c.kind)) out.push(`${c.id} is a past record (${c.kind}) and would be marked removed — the past is never removed (K5); this is a bug or tampering`);
+  return out;
+}
+
 /** Where this copy of Alfredish was installed from (written by scripts/install-approve.sh). */
 async function installedFrom(): Promise<string | undefined> {
   const text = await readFile(fileURLToPath(new URL("../SOURCE", import.meta.url)), "utf8").catch(() => "");
@@ -232,9 +254,14 @@ async function installedFrom(): Promise<string | undefined> {
 }
 
 /** The terminal dialogue (run by the owner): the arrow-key screen in a terminal, plain questions otherwise. */
-export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate }): Promise<number> {
+export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate; invalid?: readonly string[] }): Promise<number> {
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const changes = changesSince(o.state, o.snap, tty && !process.env["NO_COLOR"] ? COLOURS : PLAIN);
+  const blockers = await approveBlockers({ base: o.base, invalid: o.invalid ?? [], changes });
+  if (blockers.length) {
+    console.log(`Not started — nothing shown, nothing signed:\n${blockers.map((b) => `✗ ${b}`).join("\n")}`);
+    return 1;
+  }
   const vendor = await hashTree(join(o.base, "vendor", "alfredish"));
   const vendorChanged = vendor !== null && vendor !== (o.state?.last?.alfredish ?? null);
   if (!changes.length && !vendorChanged) {

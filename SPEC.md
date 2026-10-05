@@ -360,5 +360,10 @@ under its result whenever anything is unapproved, so an agent that never read AG
 note shows in the check (yellow, K26) until the definition is rewritten; then it is unapproved as usual, and the owner
 sees the note again next to the new version.
 
+**When it refuses.** `alfred approve` shows nothing and signs nothing when it could show something false: when the
+memory's copy of Alfredish (`vendor/alfredish/src`) is not exactly the code the tool runs (it could misread the memory —
+an older tool once read three past events it did not understand as removed; reinstall it from that version), when a
+definition cannot be read (K16), or when a past record (event, session, research) would be marked removed (K5).
+
 **The owner's habit.** Any program can ask the key to sign. The owner signs only while running `alfred approve`
 themselves; a prompt naming another program (e.g. the agent's) is refused.

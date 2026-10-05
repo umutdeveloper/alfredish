@@ -113,7 +113,7 @@ async function main(argv: string[]): Promise<number> {
         console.log(approvals.issues.map((i) => `✗ ${i.id} — ${i.rule}: ${i.message}`).join("\n"));
         return 1;
       }
-      return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, ...(agentSocket && { agentSocket }) });
+      return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, invalid: [...invalid.keys()].map((d) => d.id), ...(agentSocket && { agentSocket }) });
     }
     case "keys": {
       const keys = defs.filter((d): d is KeyDef => d.kind === "key");

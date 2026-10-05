@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildRecord, changesSince, groupOf, textChange, writeSigned, type Decision } from "../src/approve.ts";
+import { approveBlockers, buildRecord, changesSince, groupOf, textChange, TOOL_SRC, writeSigned, type Decision } from "../src/approve.ts";
 import { loadApprovals, recordName, type ApprovedState } from "../src/approval.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 
@@ -101,5 +101,38 @@ describe("alfred approve — the record and its signature (§14, K27)", () => {
     const r = await writeSigned(base, rec, join(keys, "anchor.pub"), join(keys, "no-such-agent.sock"));
     expect(r).toEqual({ ok: false, message: "no owner key on this machine could sign — nothing recorded" });
     expect(existsSync(join(base, "approvals", recordName(1)))).toBe(false);
+  });
+});
+
+describe("alfred approve — refuses to start when it could show the owner something false", () => {
+  const memoryWith = async (src: string) => {
+    const base = await mkdtemp(join(tmpdir(), "alfredish-blockers-"));
+    await mkdir(join(base, "vendor/alfredish"), { recursive: true });
+    await cp(src, join(base, "vendor/alfredish/src"), { recursive: true });
+    await writeFile(join(base, "vendor/alfredish/PINNED"), "abc1234\n");
+    return base;
+  };
+
+  it("starts when the memory uses exactly this tool's Alfredish, every definition is readable and no past is removed", async () => {
+    const base = await memoryWith(TOOL_SRC);
+    const changes = changesSince(state({}), { "r.new": item("rule", "h", { title: "New" }) });
+    expect(await approveBlockers({ base, invalid: [], changes })).toEqual([]);
+  });
+
+  it("refuses when the memory uses another Alfredish than the tool (an older tool once misread three past events as removed)", async () => {
+    const base = await memoryWith(TOOL_SRC);
+    await writeFile(join(base, "vendor/alfredish/src/newer.ts"), "export const retired = 1;\n");
+    const b = await approveBlockers({ base, invalid: [], changes: [] });
+    expect(b).toEqual([expect.stringContaining("this alfred-approve is not the Alfredish this memory uses (abc1234)")]);
+  });
+
+  it("refuses when a definition cannot be read, and never offers to remove the past", async () => {
+    const base = await memoryWith(TOOL_SRC);
+    const changes = changesSince(state({ "e.past": item("event", "h1", { title: "Past" }), "i.old": item("idea", "h2", { title: "Old" }) }), {});
+    const b = await approveBlockers({ base, invalid: ["e.broken"], changes });
+    expect(b).toEqual([
+      "1 definition cannot be read: e.broken — fix them first (alfred check shows why)",
+      "e.past is a past record (event) and would be marked removed — the past is never removed (K5); this is a bug or tampering",
+    ]);
   });
 });
