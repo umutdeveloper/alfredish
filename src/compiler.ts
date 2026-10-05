@@ -423,7 +423,7 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     if ((await conditionStatus(p.revisitWhen, o.today, o.ctx, probes)) === "green") issues.push({ id, status: "yellow", rule: "K12", message: `parked, revisit condition came true: ${p.reason}` });
   };
   for (const d of defs) {
-    if (d.kind === "link" && !used.has(d)) issues.push({ id: d.id, status: "red", rule: "K12", message: "unused (nothing rests on this link)" });
+    if (d.kind === "link" && !used.has(d) && !(d.verify.kind === "linked" && d.verify.targetKind === "rule")) issues.push({ id: d.id, status: "red", rule: "K12", message: "unused (nothing rests on this link)" });
     if (d.kind === "fact" && !used.has(d)) {
       if (d.parked) await parkedCheck(d.id, d.parked);
       else issues.push({ id: d.id, status: "red", rule: "K12", message: "unused (supports nothing and is not parked)" });

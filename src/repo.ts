@@ -9,7 +9,7 @@ import { dirname, join, relative, resolve as resolvePath, sep } from "node:path"
 import { pathToFileURL } from "node:url";
 import { isDef, type Issue } from "./compiler.ts";
 import { diffSnapshots, snapshot, type DiffLine, type Snapshot } from "./snapshot.ts";
-import { bodyHash, parseGenerated, render, type View } from "./views.ts";
+import { bodyHash, parseGenerated, render, type LinkedRule, type View } from "./views.ts";
 import { typeEscapes } from "./escapes.ts";
 import { looksLikeDef } from "./validate.ts";
 import { vendorDir } from "./approval.ts";
@@ -366,3 +366,20 @@ export async function loadProbeCache(base: string): Promise<ProbeCache> {
 export async function saveProbeCache(base: string, cache: ProbeCache): Promise<void> {
   await writeFile(join(base, CACHE_FILE), JSON.stringify(cache, null, 2) + "\n");
 }
+
+/**
+ * The rules this memory links to in other memories, each as signed at its pinned hash (the earlier signed version while
+ * the link is yellow), so AGENTS.md shows exactly what the owner approved here.
+ */
+export async function linkedRules(defs: readonly Def[], ctx: ProbeContext): Promise<LinkedRule[]> {
+  const out: LinkedRule[] = [];
+  for (const d of defs) {
+    if (d.kind !== "link" || d.verify.kind !== "linked" || d.verify.targetKind !== "rule" || !ctx.signed) continue;
+    const r = await ctx.signed(d.verify.memory, d.verify.target, d.verify.hash);
+    if ("why" in r) continue; // the link itself is red and says why
+    const data = r.hash === d.verify.hash ? r.data : r.was;
+    if (data) out.push({ link: d.id, from: `${d.verify.memory}:${d.verify.target}`, text: String(data["text"] ?? ""), appliesTo: String(data["appliesTo"] ?? "other") });
+  }
+  return out;
+}
+

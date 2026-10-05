@@ -47,7 +47,15 @@ const code = (id: string) => `\`${id}\``;
 const list = (items: string[]) => (items.length ? items.join("\n") : "- none");
 
 /** `approval`: the memory has owner approval (§14), so AGENTS.md starts with Alfredish's approval protocol. */
-export function buildViews(defs: readonly Def[], report: Report, today: ISODate, o: { approval?: boolean } = {}): View[] {
+/** A rule of another memory this memory links to (§9.2), as its owner signed it at the pinned hash. */
+export interface LinkedRule {
+  link: string;
+  from: string;
+  text: string;
+  appliesTo: string;
+}
+
+export function buildViews(defs: readonly Def[], report: Report, today: ISODate, o: { approval?: boolean; linkedRules?: readonly LinkedRule[] } = {}): View[] {
   const views: View[] = [];
   const of = <K extends Def["kind"]>(k: K) => defs.filter((d): d is Extract<Def, { kind: K }> => d.kind === k).sort(byId);
   const sessions = of("session").sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
@@ -102,10 +110,14 @@ export function buildViews(defs: readonly Def[], report: Report, today: ISODate,
 
   // AGENTS.md
   {
-    const rules = of("rule");
+    // The memory's own rules, and the rules it links to in another memory (named with where they come from).
+    const rules = [
+      ...of("rule").map((r) => ({ text: r.text, appliesTo: r.appliesTo, ref: code(r.id) })),
+      ...(o.linkedRules ?? []).map((r) => ({ text: r.text, appliesTo: r.appliesTo, ref: `${code(r.from)}, linked` })),
+    ];
     const groups = [...new Set(rules.map((r) => r.appliesTo))].sort();
     const protocol = o.approval ? `## alfredish (owner approval)\n${APPROVAL_PROTOCOL.map((l) => `- ${l}`).join("\n")}\n\n` : "";
-    det("AGENTS.md", `# Agent rules\n\n${protocol}${groups.map((g) => `## ${g}\n${rules.filter((r) => r.appliesTo === g).map((r) => `- ${r.text} (${code(r.id)})`).join("\n")}`).join("\n\n") || "- none"}\n`);
+    det("AGENTS.md", `# Agent rules\n\n${protocol}${groups.map((g) => `## ${g}\n${rules.filter((r) => r.appliesTo === g).sort((a, b) => a.ref.localeCompare(b.ref)).map((r) => `- ${r.text} (${r.ref})`).join("\n")}`).join("\n\n") || "- none"}\n`);
   }
 
   // sessions/<id>.md and log.md

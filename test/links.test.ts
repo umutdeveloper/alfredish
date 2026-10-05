@@ -3,7 +3,9 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { compile } from "../src/compiler.ts";
+import { compile, collect } from "../src/compiler.ts";
+import { linkedRules } from "../src/repo.ts";
+import { buildViews } from "../src/views.ts";
 import { readSigned } from "../src/context.ts";
 import { decision, link, review, session } from "../src/dsl.ts";
 import { recordName, sha256, signFile, type ApprovalRecord } from "../src/approval.ts";
@@ -104,5 +106,28 @@ describe("§9.2 link: resting on another memory's definition as its owner signed
   it("a link nothing rests on is red (K12)", async () => {
     const r = await compile([linked(H2)], { today, ctx: ctx() });
     expect(r.issues).toContainEqual(expect.objectContaining({ id: "link.alfred.self.experience", rule: "K12", message: "unused (nothing rests on this link)" }));
+  });
+
+  it("a linked rule of another memory shows in AGENTS.md as signed there, named with where it comes from", async () => {
+    const R1 = "c3c3c3c3c3c3c3c3";
+    const prev = await readFile(join(alfred, "approvals", recordName(2)), "utf8");
+    await sign(3, { "rule.talk.honest": { kind: "rule", hash: R1, data: { kind: "rule", id: "rule.talk.honest", title: "Honest", appliesTo: "conversation", text: "Be honest: do not soften bad news.", evidence: "human" } } }, prev);
+    const honest = link({ id: "link.alfred.rule.talk.honest", title: "Honest", origin: s, memory: "alfred", target: "rule.talk.honest", kind: "rule", hash: R1, evidence: "human" });
+    const { defs } = collect([honest]);
+    const rules = await linkedRules(defs, ctx());
+    expect(rules).toEqual([{ link: "link.alfred.rule.talk.honest", from: "alfred:rule.talk.honest", text: "Be honest: do not soften bad news.", appliesTo: "conversation" }]);
+    const report = await compile([honest], { today, ctx: ctx() });
+    const agents = buildViews(defs, report, today, { linkedRules: rules }).find((v) => v.path === "AGENTS.md")!.body;
+    expect(agents).toContain("## conversation\n- Be honest: do not soften bad news. (`alfred:rule.talk.honest`, linked)");
+    expect(report.issues.filter((i) => i.rule === "K12")).toEqual([]); // a rule link is used by AGENTS.md itself
+  });
+
+  it("while a linked rule is yellow, AGENTS.md keeps the text this memory's owner approved", async () => {
+    const prev = await readFile(join(alfred, "approvals", recordName(3)), "utf8");
+    await sign(4, { "rule.talk.honest": { kind: "rule", hash: "d4d4d4d4d4d4d4d4", data: { kind: "rule", id: "rule.talk.honest", title: "Honest", appliesTo: "conversation", text: "Soften bad news a little.", evidence: "human" } } }, prev);
+    const honest = link({ id: "link.alfred.rule.talk.honest", title: "Honest", origin: s, memory: "alfred", target: "rule.talk.honest", kind: "rule", hash: "c3c3c3c3c3c3c3c3", evidence: "human" });
+    const rules = await linkedRules(collect([honest]).defs, ctx());
+    expect(rules.map((r) => r.text)).toEqual(["Be honest: do not soften bad news."]);
+    expect((await compile([honest], { today, ctx: ctx() })).results.get(honest.id)!.status).toBe("yellow");
   });
 });

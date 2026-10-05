@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkHistory, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkHistory, linkedRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
 import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals, vendorDir } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
@@ -100,7 +100,7 @@ done
   switch (cmd) {
     case "build": {
       const approval = existsSync(join(base, APPROVALS_DIR));
-      const changed = await writeViews(buildViews(defs, report, day, { approval }), snap, repo);
+      const changed = await writeViews(buildViews(defs, report, day, { approval, linkedRules: await linkedRules(defs, ctx) }), snap, repo);
       console.log(changed.length ? changed.map((c) => (c.startsWith("removed ") ? c.replace("removed ", "removed: ") : `written: ${c}`)).join("\n") : "no changes");
       return 0;
     }
@@ -114,7 +114,7 @@ done
         ...approvals.issues,
         ...(signed ? checkApproval(snap, defs, signed) : []),
         ...(signed ? await checkAlfredishCopy(base, signed) : []),
-        ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined }), snap, repo)),
+        ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined, linkedRules: await linkedRules(defs, ctx) }), snap, repo)),
         ...(await checkPast(snap, day, repo, reference)),
         ...(await checkImports(repo)),
         ...(await checkTypeEscapes(repo)),

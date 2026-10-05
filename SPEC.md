@@ -279,7 +279,9 @@ a link green:
   state → **red**. All memories live on one owner's machine, so an unreadable one is a fault, never "unknown".
 
 Where the memories are is the machine's, not a memory's (K15): `~/.alfredish/memories.json`, `{ "<name>": "<folder>" }`
-(overridable with `ALFREDISH_MEMORIES`). A link nothing rests on is red (K12).
+(overridable with `ALFREDISH_MEMORIES`). A link nothing rests on is red (K12), except a link to a rule: a project memory links
+the owner's own rules (how to talk, how to keep memory), and AGENTS.md lists each with where it comes from, in the
+wording signed at the pinned hash — while the link is yellow, the earlier wording stays until it is re-linked.
 ## 10. Agent rules (for every agent using Alfredish)
 
 1. At session start run `alfred check`, then read only `NOW.md`. During the session use `alfred check --quick` or
