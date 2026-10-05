@@ -4,15 +4,16 @@
 // from, so the owner sees exactly what they sign.
 import type { Change, Decision } from "./approve.ts";
 
-export type Button = "approve" | "correct" | "reject" | "skip" | "approveRemoval" | "startAll" | "startOne" | "sign" | "back" | "quit";
+export type Button = "approve" | "correct" | "reject" | "skip" | "approveRemoval" | "startAll" | "startOne" | "approveGroup" | "sign" | "back" | "quit";
 
 const W = {
     approve: "approve", correct: "correct", reject: "reject", skip: "skip", approveRemoval: "approve removal",
-    startAll: "approve all as the starting point", startOne: "look one by one", sign: "sign", back: "back", quit: "quit without signing",
+    startAll: "approve all as the starting point", startOne: "look one by one", approveGroup: "approve all of them", sign: "sign", back: "back", quit: "quit without signing",
     why: "why", test: "test", noteLast: "your note last time", noteCorrect: "note for the agent — what should change:", noteReject: "why (optional):",
     noteEmpty: "write the note first", keys: "← → choose · enter apply · ↑ ↓ previous / next · q quit", keysNote: "type · enter save · esc cancel",
     summary: "summary", nothing: "Nothing decided: nothing will be recorded.", signHint: "Signing asks for your fingerprint once. Give it only if the prompt names your terminal.",
     start: (n: number) => `First approval: ${n} definitions make up the memory today.`, startWhy: "Approve the memory as it is as your starting point, or look at each definition.",
+    machine: (n: number) => `${n} machine-checked changes`, machineWhy: "each is checked by a built-in test that looks at the world (shown below); approve them together, or look one by one",
     vendor: "the memory's copy of Alfredish", noReason: "(no reason given)", sessionWhy: "the session record: its topic, questions and the reasons above",
     ops: { "+": "new", "~": "changed", "-": "removed" }, approved: "approved", corrected: "correction", rejected: "rejected", skipped: "skipped",
 } as const;
@@ -25,8 +26,10 @@ export interface Entry {
   why: string;
   lines: string[];
   buttons: Button[];
-  /** The first-round question: not a decision of its own, not in the summary. */
+  /** A question, not a decision of its own (the first round, a group): not in the summary or the dots. */
   start?: boolean;
+  /** For a group: the keys it decides together. */
+  members?: string[];
 }
 
 export const VENDOR_KEY = "vendor/alfredish";
@@ -36,7 +39,12 @@ export function entriesFor(changes: readonly Change[], o: { vendor?: string[]; f
   const out: Entry[] = [];
   if (o.firstRound) out.push({ key: "__start", title: w.start(changes.length), sub: "", why: w.startWhy, lines: [], buttons: ["startAll", "startOne"], start: true });
   if (o.vendor) out.push({ key: VENDOR_KEY, title: w.vendor, sub: "", why: "", lines: o.vendor, buttons: ["approve", "skip"] });
+  const machine = changes.filter((c) => c.group === "machine");
   for (const c of changes) {
+    if (machine.length > 1 && c === machine[0]) {
+      const lines = machine.flatMap((m) => [`${m.op} ${m.id}${m.why ? ` — ${m.why}` : ""}`, `    test: ${m.test ?? "?"}`]);
+      out.push({ key: "__machine", title: w.machine(machine.length), sub: "", why: w.machineWhy, lines, buttons: ["approveGroup", "startOne"], start: true, members: machine.map((m) => m.id) });
+    }
     const lines = [...(c.note ? [`${w.noteLast}: ${c.note}`, ""] : []), ...c.shown, ...(c.test ? [`${w.test}: ${c.test}`] : [])];
     const why = c.why ?? (c.kind === "session" ? w.sessionWhy : w.noReason);
     out.push({ key: c.id, title: c.id, sub: `${c.kind} · ${w.ops[c.op]}`, why, lines, buttons: c.op === "-" ? ["approveRemoval", "skip"] : ["approve", "correct", "reject", "skip"] });
@@ -106,6 +114,14 @@ function press(s: Screen, b: Button): void {
       return;
     case "startOne":
       return advance(s);
+    case "approveGroup": {
+      const members = new Set(s.entries[s.cur]!.members ?? []);
+      for (const k of members) s.decisions.set(k, { kind: "approve" });
+      let last = s.cur;
+      s.entries.forEach((e, i) => { if (members.has(e.key)) last = i; });
+      s.cur = last;
+      return advance(s);
+    }
     case "sign":
       s.mode = "signed";
       return;

@@ -101,6 +101,31 @@ describe("alfred approve — the arrow-key screen (§14)", () => {
   });
 });
 
+describe("alfred approve — machine-checked changes together", () => {
+  it("offers one step that approves every machine-checked change, after the owner's calls", () => {
+    const m = (id: string): (typeof changes)[number] => ({ id, op: "~", kind: "asset", group: "machine", detail: "", shown: [`verify: ${id}`], test: `github ${id} exists`, why: "built-in test now" });
+    const list = [changes.find((c) => c.id === "rule.budget")!, m("project.a"), m("project.b")];
+    const s = newScreen(entriesFor(list, { firstRound: false }));
+    keys(s, "return"); // rule.budget: approve
+    const text = plain(render(s));
+    expect(text).toContain("2 machine-checked changes");
+    expect(text).toContain("~ project.a — built-in test now");
+    expect(text).toContain("    test: github project.b exists");
+    keys(s, "return"); // approve all of them
+    expect(s.mode).toBe("summary");
+    expect([...s.decisions].map(([k, d]) => `${k}:${d.kind}`)).toEqual(["rule.budget:approve", "project.a:approve", "project.b:approve"]);
+    expect(plain(render(s))).not.toContain("machine-checked"); // a group is not a decision of its own
+  });
+
+  it("can still look at them one by one", () => {
+    const m = (id: string): (typeof changes)[number] => ({ id, op: "~", kind: "asset", group: "machine", detail: "", shown: [], test: "t" });
+    const s = newScreen(entriesFor([m("project.a"), m("project.b")], { firstRound: false }));
+    keys(s, "right", "return", "right", "right", "right", "return"); // look one by one, then skip project.a
+    expect(s.decisions.get("project.a")).toEqual({ kind: "skip" });
+    expect(s.entries[s.cur]!.key).toBe("project.b");
+  });
+});
+
 describe("alfred approve — the memory's copy of Alfredish (§14, K28)", () => {
   it("says whether the copy is exactly the commit it names, and lists the commits since the last approved one", async () => {
     const root = await mkdtemp(join(tmpdir(), "alfredish-copy-test-"));
