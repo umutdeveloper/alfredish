@@ -1,8 +1,8 @@
 // SPEC §14: what the owner's signed approvals mean for a check — K26 (unapproved content) and K28 (the signed state is
 // the reference, and the memory's copy of Alfredish is part of it).
-import { join } from "node:path";
+
 import { deps, type Issue } from "./compiler.ts";
-import { hashTree, type ApprovedState } from "./approval.ts";
+import { hashTree, vendorDir, type ApprovedState } from "./approval.ts";
 import type { Snapshot } from "./snapshot.ts";
 import type { Def } from "./types.ts";
 
@@ -106,6 +106,6 @@ export function checkApproval(snap: Snapshot, defs: readonly Def[], state: Appro
 export async function checkAlfredishCopy(base: string, state: ApprovedState): Promise<Issue[]> {
   const signed = state.last?.alfredish;
   if (!signed) return [];
-  const now = await hashTree(join(base, "vendor", "alfredish"));
+  const now = await hashTree(vendorDir(base));
   return now === signed ? [] : [{ id: "vendor/alfredish", status: "red", rule: "K28", message: "the copy of Alfredish changed since the owner's last approval — it counts only after alfred approve" }];
 }

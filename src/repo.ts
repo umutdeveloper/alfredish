@@ -12,6 +12,7 @@ import { diffSnapshots, snapshot, type DiffLine, type Snapshot } from "./snapsho
 import { bodyHash, parseGenerated, render, type View } from "./views.ts";
 import { typeEscapes } from "./escapes.ts";
 import { looksLikeDef } from "./validate.ts";
+import { vendorDir } from "./approval.ts";
 import { cosine, embedder, EVENT_SIMILARITY_THRESHOLD, eventText, KEY_SIMILARITY_THRESHOLD, keyText, rank, type Embed } from "./similarity.ts";
 import type { Def, EventDef, ISODate, KeyDef, ProbeCache, ProbeContext } from "./types.ts";
 
@@ -251,10 +252,11 @@ export async function checkImports(o: RepoOptions): Promise<Issue[]> {
   const tsc = existsSync(local) ? local : join(dirname(createRequire(import.meta.url).resolve("typescript/package.json")), "bin", "tsc");
   const { stdout } = await run(process.execPath, [tsc, "-p", join(root, "tsconfig.json"), "--listFilesOnly"], { maxBuffer: 16 << 20 });
   const issues: Issue[] = [];
+  const shared = vendorDir(root); // the memory's Alfredish copy, possibly shared with other memories of the repository
   for (const line of stdout.split("\n")) {
     const f = line.trim();
     if (!f) continue;
-    const inside = f === root || f.startsWith(root + sep);
+    const inside = f === root || f.startsWith(root + sep) || f.startsWith(shared + sep);
     const library = f.split(sep).includes("node_modules");
     if (!inside && !library) {
       issues.push({ id: f, status: "red", rule: "K15", message: "the memory's program loads this file from outside the memory folder" });

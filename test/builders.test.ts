@@ -41,6 +41,13 @@ describe("github(repo): through the owner's gh login; unknown is never green", (
     expect(await github("umutdeveloper/alfred").absent().run(machine({ [gh("repos/umutdeveloper/alfred", ".full_name")]: http("401 Unauthorized", "") }))).toEqual({ ok: false, detail: "GitHub answered 401: absence unknown" });
   });
 
+  it("is private only when GitHub says so; a public or unknown repository is red", async () => {
+    const p = gh(`repos/${repo}`, ".private");
+    expect(await github(repo).isPrivate().run(machine({ [p]: http("200 OK", "true") }))).toEqual({ ok: true });
+    expect(await github(repo).isPrivate().run(machine({ [p]: http("200 OK", "false") }))).toEqual({ ok: false, detail: "the repository is PUBLIC" });
+    expect(await github(repo).isPrivate().run(machine({}))).toEqual({ ok: false, detail: "no answer from GitHub (gh)" });
+  });
+
   it("checks the last commit touching a path", async () => {
     const path = gh("repos/umutdeveloper/esik/commits?path=docs&per_page=1", ".[0].sha");
     expect(await github("umutdeveloper/esik").lastCommitTouching("docs", "8eee4d6").run(machine({ [path]: http("200 OK", "8eee4d6914d3b0a73bf47f7366c7133c91dac712") }))).toEqual({ ok: true });

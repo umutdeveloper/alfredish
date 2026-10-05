@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>] | keys | approve   [--memory memory/index.ts]   (SPEC §9)
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { chmod, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,7 +10,7 @@ import { nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
 import { areaDefs, checkHistory, checkImports, checkNewEvents, checkNewKeys, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
-import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals } from "./approval.ts";
+import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals, vendorDir } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
 import { approveInteractive } from "./approve.ts";
 import { snapshot } from "./snapshot.ts";
@@ -43,12 +44,24 @@ async function main(argv: string[]): Promise<number> {
   const memoryDirAbs = dirname(entry);
   const base = dirname(memoryDirAbs);
   if (cmd === "hook") {
-    // Portable (K15): paths relative to the repository root, so the hook works wherever the folder is moved.
-    const cli = relative(base, fileURLToPath(import.meta.url));
-    const hook = join(base, ".git", "hooks", "pre-commit");
-    const rel = join(basename(memoryDirAbs), basename(entry));
-    const typecheck = "if [ -f tsconfig.json ] && [ -x node_modules/.bin/tsc ]; then node_modules/.bin/tsc --noEmit || exit 1; fi";
-    await writeFile(hook, `#!/bin/sh\n# installed by alfredish\ncd "$(git rev-parse --show-toplevel)" || exit 1\n${typecheck}\nnode "${cli}" check --memory "${rel}" || { echo "alfred check is red: commit stopped"; exit 1; }\n`);
+    // One hook for the repository, which may hold several memories (§2): every memory the commit touches is checked —
+    // all of them when the shared Alfredish copy or the packages change. Paths are relative to the repository (K15).
+    const top = await new Promise<string>((done) => execFile("git", ["rev-parse", "--show-toplevel"], { cwd: base }, (err, out) => done(err ? base : String(out).trim())));
+    const cli = relative(top, fileURLToPath(import.meta.url));
+    const vendor = relative(top, vendorDir(base)) || ".";
+    const hook = join(top, ".git", "hooks", "pre-commit");
+    const script = `#!/bin/sh
+# installed by alfredish: checks every memory of this repository that the commit touches
+cd "$(git rev-parse --show-toplevel)" || exit 1
+staged="$(git diff --cached --name-only)"
+for idx in $(find . \\( -name node_modules -o -name vendor -o -name .git \\) -prune -o -path '*/memory/index.ts' -print); do
+  m="\${idx%/memory/index.ts}"; m="\${m#./}"
+  if [ "$m" != "." ] && ! printf '%s\\n' "$staged" | grep -q -e "^$m/" -e "^${vendor}/" -e "^package" -e "^node_modules"; then continue; fi
+  if [ -f "$m/tsconfig.json" ] && [ -x node_modules/.bin/tsc ]; then node_modules/.bin/tsc -p "$m/tsconfig.json" --noEmit || { echo "typecheck of $m failed: commit stopped"; exit 1; }; fi
+  node "${cli}" check --memory "$m/memory/index.ts" || { echo "alfred check of $m is red: commit stopped"; exit 1; }
+done
+`;
+    await writeFile(hook, script);
     await chmod(hook, 0o755);
     console.log(`installed: ${hook}`);
     return 0;

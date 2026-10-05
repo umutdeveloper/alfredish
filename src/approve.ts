@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { entriesFor, newScreen, render, step, VENDOR_KEY, type Key } from "./approve-screen.ts";
-import { APPROVALS_DIR, hashTree, readAnchor, recordName, run, sha256, signFile, type ApprovalRecord, type ApprovedState } from "./approval.ts";
+import { APPROVALS_DIR, hashTree, readAnchor, recordName, run, sha256, signFile, vendorDir, type ApprovalRecord, type ApprovedState } from "./approval.ts";
 import { diffSnapshots, type Snapshot } from "./snapshot.ts";
 import type { ISODate } from "./types.ts";
 
@@ -227,7 +227,7 @@ const COPY = {
 
 export async function alfredishCopyInfo(base: string, previous: string | null | undefined, source?: string): Promise<{ lines: string[]; pinned: string | null }> {
   const w = COPY;
-  const vendor = join(base, "vendor", "alfredish");
+  const vendor = vendorDir(base);
   const pinned = (await readFile(join(vendor, "PINNED"), "utf8").catch(() => "")).trim() || null;
   const lines = [`Alfredish ${pinned ?? "?"}${previous ? w.last(previous) : ""}`];
   if (!source || !pinned || !/^[0-9a-f]{4,40}$/.test(pinned)) {
@@ -271,9 +271,9 @@ export interface Blocker {
 export async function approveBlockers(o: { base: string; invalid: readonly string[]; changes: readonly Change[]; toolSrc?: string }): Promise<Blocker[]> {
   const out: Blocker[] = [];
   const mine = await hashTree(o.toolSrc ?? TOOL_SRC);
-  const memory = await hashTree(join(o.base, "vendor", "alfredish", "src"));
+  const memory = await hashTree(join(vendorDir(o.base), "src"));
   if (memory !== null && mine !== memory) {
-    const pinned = (await readFile(join(o.base, "vendor", "alfredish", "PINNED"), "utf8").catch(() => "")).trim();
+    const pinned = (await readFile(join(vendorDir(o.base), "PINNED"), "utf8").catch(() => "")).trim();
     const commit = /^[0-9a-f]{7,40}$/.test(pinned) ? pinned : undefined;
     out.push({ message: `this alfred-approve is not the Alfredish this memory uses (${pinned || "?"}), so it could misread it`, ...(commit && { update: commit }) });
   }
@@ -324,7 +324,7 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
     console.log(`Not started — nothing shown, nothing signed:\n${lines.map((l) => `✗ ${l}`).join("\n")}`);
     return 1;
   }
-  const vendor = await hashTree(join(o.base, "vendor", "alfredish"));
+  const vendor = await hashTree(vendorDir(o.base));
   const vendorChanged = vendor !== null && vendor !== (o.state?.last?.alfredish ?? null);
   if (!changes.length && !vendorChanged) {
     console.log("Nothing changed since your last approval.");

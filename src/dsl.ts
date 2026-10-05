@@ -285,6 +285,13 @@ export const github = (repo: string) => ({
       if (a.status !== 200) return { ok: false, detail: `GitHub answered ${a.status}` };
       return a.body.toLowerCase() === repo.toLowerCase() ? { ok: true } : { ok: false, detail: `answered as ${a.body || "?"} (renamed or moved)` };
     }),
+  isPrivate: () =>
+    probe(`github ${repo} is private`, async (ctx) => {
+      const a = await ghCall(ctx, `repos/${repo}`, ".private");
+      if (!a) return { ok: false, detail: "no answer from GitHub (gh)" };
+      if (a.status !== 200) return { ok: false, detail: a.status === 404 ? "not found" : `GitHub answered ${a.status}` };
+      return a.body === "true" ? { ok: true } : { ok: false, detail: a.body === "false" ? "the repository is PUBLIC" : `unexpected answer ${a.body}` };
+    }),
   absent: () =>
     probe(`github ${repo} is absent`, async (ctx) => {
       const a = await ghCall(ctx, `repos/${repo}`, ".full_name");

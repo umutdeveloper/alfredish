@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import type { Issue } from "./compiler.ts";
 import type { ISODate } from "./types.ts";
 
@@ -43,6 +43,21 @@ export interface ApprovedState {
   items: Map<string, ApprovedItem>;
   rejected: Map<string, { hash: string; note?: string }>;
   corrections: Map<string, { hash: string; note: string }>;
+}
+
+/**
+ * The copy of Alfredish a memory runs on: vendor/alfredish next to it, else in the nearest folder above it inside the
+ * same git repository (one shared copy for a repository of memories, §2).
+ */
+export function vendorDir(base: string): string {
+  const own = join(resolve(base), "vendor", "alfredish");
+  for (let d = resolve(base); ; ) {
+    const v = join(d, "vendor", "alfredish");
+    if (existsSync(v)) return v;
+    const up = dirname(d);
+    if (up === d || existsSync(join(d, ".git"))) return own; // never above the repository
+    d = up;
+  }
 }
 
 export const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");

@@ -100,7 +100,7 @@ If not, it is parked explicitly with `parked: { reason, revisitWhen }` (K12).
 
 | Kind | What it does | Example | Run by |
 |---|---|---|---|
-| `probe` | Looks at the world automatically | `page(url).contains(text)`, `http(url).status(200)`, `header(url, name).contains(x)`, `file(local(path)).exists()`, `git(repo).clean()`, `domain(name).expiresOnOrAfter(date)`, `github(repo).exists()` / `.absent()` / `.lastCommitTouching(path, sha)`, `dns(name, type, { server? }).contains(v)` / `.lacks(v…)`, `git(repo).noRemote()`, `all(...)`, `cmd(...)` | the CLI, in seconds |
+| `probe` | Looks at the world automatically | `page(url).contains(text)`, `http(url).status(200)`, `header(url, name).contains(x)`, `file(local(path)).exists()`, `git(repo).clean()`, `domain(name).expiresOnOrAfter(date)`, `github(repo).exists()` / `.absent()` / `.isPrivate()` / `.lastCommitTouching(path, sha)`, `dns(name, type, { server? }).contains(v)` / `.lacks(v…)`, `git(repo).noRemote()`, `all(...)`, `cmd(...)` | the CLI, in seconds |
 | `agentProbe` | A look that needs a logged-in browser | `agentProbe("dashboard shows the account", "30d", last)` | the agent; result + date are recorded and expire with `ttl` |
 | `source` | Read in a primary source | `source(url, { readAt, ttl: "30d" })` | the agent; red when expired |
 | `fromFinding` | Relies on a research finding | `fromFinding(finding, { ttl: "90d" })` | the compiler; red when expired |
@@ -248,6 +248,16 @@ nomic-embed-text-v1.5 (Q4_K_M, Apache-2.0), run in-process with llama.cpp (node-
 application. The text compared is `clustering: <name> — <describe>`; similarity is the cosine of the two vectors. If
 the model is missing, altered (hash mismatch) or cannot run, K23 is red ("cannot compare keys") — it never passes
 unseen.
+
+### 9.3 A repository of memories
+
+Several memories may share one repository (`<repo>/<name>/memory/index.ts`, each with its own `approvals/` and views)
+and one Alfredish copy at the repository root (`<repo>/vendor/alfredish`): a memory runs on `vendor/alfredish` next to
+it, else on the nearest one above it inside the same repository. Every memory's records pin that shared copy (K28). A
+memory may load the shared copy but never another memory's files (K15): it rests on them with a link (§9.2). `alfred
+hook` installs one pre-commit hook for the repository that checks every memory the commit touches — all of them when the
+shared copy or the packages change. `github(repo).isPrivate()` lets a memory test that the repository holding it stays
+private.
 
 ### 9.2 Links to other memories
 
