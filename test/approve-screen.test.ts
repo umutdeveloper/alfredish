@@ -139,6 +139,21 @@ describe("alfred approve — definitions that moved into another memory", () => 
     expect(s.decisions.get("event.esik.b")).toEqual({ kind: "approve" });
     expect(s.entries[s.cur]!.key).toBe("idea.other"); // a removal that did not move is still decided on its own
   });
+
+  it("a group step never skips the entries that lie between its members", () => {
+    const gone = (id: string): (typeof changes)[number] => ({ id, op: "-", kind: "fact", group: "owner", detail: "", shown: [] });
+    const changed = (id: string): (typeof changes)[number] => ({ id, op: "~", kind: "decision", group: "owner", detail: "", shown: [] });
+    const list = [changed("alfred.projectMemories"), gone("esik.a"), changed("event.esikMoved"), gone("research.esik.b"), changed("s.today")];
+    const s = newScreen(entriesFor(list, { firstRound: false, moved: new Map([["esik.a", "esik"], ["research.esik.b", "esik"]]) }));
+    keys(s, "return"); // approve both moved removals
+    const shown: string[] = [];
+    while (s.mode === "browse") {
+      shown.push(s.entries[s.cur]!.key);
+      keys(s, "return");
+    }
+    expect(shown).toEqual(["alfred.projectMemories", "event.esikMoved", "s.today"]);
+    expect([...s.decisions.keys()].sort()).toEqual(["alfred.projectMemories", "esik.a", "event.esikMoved", "research.esik.b", "s.today"]);
+  });
 });
 
 describe("alfred approve — the memory's copy of Alfredish (§14, K28)", () => {

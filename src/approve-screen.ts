@@ -69,9 +69,11 @@ export interface Screen {
   noteFor?: "correct" | "reject";
   error?: string;
   decisions: Map<string, Decision>;
+  /** Keys a group step decided: moving on skips them, and nothing else (every other entry is still shown). */
+  grouped: Set<string>;
 }
 
-export const newScreen = (entries: Entry[]): Screen => ({ entries, cur: 0, sel: 0, mode: "browse", note: "", decisions: new Map() });
+export const newScreen = (entries: Entry[]): Screen => ({ entries, cur: 0, sel: 0, mode: "browse", note: "", decisions: new Map(), grouped: new Set() });
 
 /** A key as Node's readline reports it. */
 export interface Key {
@@ -92,7 +94,9 @@ function buttonsOf(s: Screen): Button[] {
 
 function advance(s: Screen): void {
   s.sel = 0;
-  if (s.cur < s.entries.length - 1) s.cur++;
+  let next = s.cur + 1;
+  while (next < s.entries.length && s.grouped.has(s.entries[next]!.key)) next++;
+  if (next < s.entries.length) s.cur = next;
   else s.mode = "summary";
 }
 
@@ -123,12 +127,11 @@ function press(s: Screen, b: Button): void {
     case "startOne":
       return advance(s);
     case "approveGroup": {
-      const members = new Set(s.entries[s.cur]!.members ?? []);
-      for (const k of members) s.decisions.set(k, { kind: "approve" });
-      let last = s.cur;
-      s.entries.forEach((e, i) => { if (members.has(e.key)) last = i; });
-      s.cur = last;
-      return advance(s);
+      for (const k of s.entries[s.cur]!.members ?? []) {
+        s.decisions.set(k, { kind: "approve" });
+        s.grouped.add(k);
+      }
+      return advance(s); // to the next entry that is not one of them — entries between them are still shown
     }
     case "sign":
       s.mode = "signed";
