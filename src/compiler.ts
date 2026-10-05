@@ -430,6 +430,16 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     const on = [...deps(d), ...(d.kind === "idea" ? (d.basedOn ?? []) : [])];
     for (const l of on) if (l.kind === "link" && l.verify.kind === "linked" && l.verify.follows) issues.push({ id: l.id, status: "red", rule: "K12", message: `${d.id} rests on this following link — a link something rests on pins its target: link it with its hash` });
   }
+  // K12: findings of past research parked by an event (the research itself stays as it was, K5).
+  const parkedByEvent = new Map<string, string>();
+  const findingIds = new Set(defs.flatMap((d) => (d.kind === "research" ? Object.keys(d.findings).map((k) => `${d.id}#${k}`) : [])));
+  for (const d of defs) {
+    if (d.kind !== "event") continue;
+    for (const at of Object.keys(d.parks ?? {})) {
+      if (!findingIds.has(at)) issues.push({ id: d.id, status: "red", rule: "K12", message: `parks ${at}, which is no finding of a research here` });
+      else parkedByEvent.set(at, d.id);
+    }
+  }
   for (const d of defs) {
     if (d.kind === "link" && !used.has(d) && !(d.verify.kind === "linked" && d.verify.targetKind === "rule")) issues.push({ id: d.id, status: "red", rule: "K12", message: "unused (nothing rests on this link)" });
     if (d.kind === "fact" && !used.has(d)) {
@@ -440,8 +450,13 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     if (d.kind === "research") {
       for (const f of Object.values(d.findings)) {
         if (f.source && typeof f.source !== "string") usedRaw.add(f.source.path);
-        if (usedFindings.has(f)) continue;
-        if (f.parked) await parkedCheck(`${d.id}#${f.key}`, f.parked);
+        const at = `${d.id}#${f.key}`;
+        if (usedFindings.has(f)) {
+          if (parkedByEvent.has(at)) issues.push({ id: at, status: "red", rule: "K12", message: `parked by ${parkedByEvent.get(at)}, but it still supports something here — take it out of parks` });
+          continue;
+        }
+        if (parkedByEvent.has(at)) { parked++; continue; }
+        if (f.parked) await parkedCheck(at, f.parked);
         else issues.push({ id: `${d.id}#${f.key}`, status: "red", rule: "K12", message: "finding unused and not parked" });
       }
       for (const p of d.rawData) {

@@ -185,6 +185,8 @@ export interface EventDef {
   affects: readonly (Def | RetiredRef)[];
   /** Ids of present-tense definitions removed on this event's day (K20). */
   retires?: readonly string[];
+  /** K12: findings of past research ("<research id>#<finding>") that support nothing any more, with why; the research stays as it was. */
+  parks?: Readonly<Record<string, string>>;
   /** Definitions (past ones too) that moved on this event's day into another memory, where the owner signed them (K5, K20). */
   moves?: { memory: string; ids: readonly string[] };
   /** Past events removed on this event's day because they only retold the kept event `repeatOf` (K32). */
