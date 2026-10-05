@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { approveBlockers, buildRecord, changesSince, groupOf, textChange, TOOL_SRC, writeSigned, type Decision } from "../src/approve.ts";
+import { approveBlockers, buildRecord, changesSince, groupOf, selfUpdate, textChange, TOOL_SRC, writeSigned, type Decision } from "../src/approve.ts";
 import { loadApprovals, recordName, type ApprovedState } from "../src/approval.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 
@@ -123,14 +123,23 @@ describe("alfred approve — refuses to start when it could show the owner somet
     const base = await memoryWith(TOOL_SRC);
     await writeFile(join(base, "vendor/alfredish/src/newer.ts"), "export const retired = 1;\n");
     const b = await approveBlockers({ base, invalid: [], changes: [] });
-    expect(b).toEqual([expect.stringContaining("this alfred-approve is not the Alfredish this memory uses (abc1234)")]);
+    expect(b).toEqual([{ message: "this alfred-approve is not the Alfredish this memory uses (abc1234), so it could misread it", update: "abc1234" }]);
+  });
+
+  it("updates itself with its own root-owned installer, once; never from the Alfredish folder", () => {
+    const blockers = [{ message: "not the same", update: "abc1234" }];
+    const exists = (p: string) => p === "/usr/local/lib/alfredish/install-approve.sh";
+    expect(selfUpdate(blockers, { lib: "/usr/local/lib/alfredish", env: {}, exists })).toEqual({ run: ["/usr/bin/sudo", "/bin/sh", "/usr/local/lib/alfredish/install-approve.sh", "--update", "abc1234"] });
+    expect(selfUpdate(blockers, { lib: "/usr/local/lib/alfredish", env: { ALFREDISH_UPDATED_TO: "abc1234" }, exists })).toEqual({ refuse: expect.stringContaining("vendor/alfredish is not exactly that commit") });
+    expect(selfUpdate(blockers, { lib: "/somewhere/vendor/alfredish", env: {}, exists })).toEqual({ refuse: expect.stringContaining("cannot update itself") });
+    expect(selfUpdate([{ message: "unreadable" }], { lib: "/usr/local/lib/alfredish", env: {}, exists })).toBeUndefined();
   });
 
   it("refuses when a definition cannot be read, and never offers to remove the past", async () => {
     const base = await memoryWith(TOOL_SRC);
     const changes = changesSince(state({ "e.past": item("event", "h1", { title: "Past" }), "i.old": item("idea", "h2", { title: "Old" }) }), {});
     const b = await approveBlockers({ base, invalid: ["e.broken"], changes });
-    expect(b).toEqual([
+    expect(b.map((x) => x.message)).toEqual([
       "1 definition cannot be read: e.broken — fix them first (alfred check shows why)",
       "e.past is a past record (event) and would be marked removed — the past is never removed (K5); this is a bug or tampering",
     ]);

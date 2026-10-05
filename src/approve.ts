@@ -2,7 +2,9 @@
 // is plain functions so it can be tested with throwaway keys; the terminal dialogue is a thin layer on top.
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createInterface, emitKeypressEvents } from "node:readline";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { entriesFor, newScreen, render, step, VENDOR_KEY, type Key } from "./approve-screen.ts";
@@ -234,17 +236,38 @@ const PAST_KINDS = new Set(["event", "session", "research"]);
  * Alfredish code, every definition understood, and never offering to remove the past. An older tool once read three
  * past events it did not understand as removed.
  */
-export async function approveBlockers(o: { base: string; invalid: readonly string[]; changes: readonly Change[]; toolSrc?: string }): Promise<string[]> {
-  const out: string[] = [];
+export interface Blocker {
+  message: string;
+  /** Set when the tool runs another Alfredish than the memory: the commit to update itself to. */
+  update?: string;
+}
+
+export async function approveBlockers(o: { base: string; invalid: readonly string[]; changes: readonly Change[]; toolSrc?: string }): Promise<Blocker[]> {
+  const out: Blocker[] = [];
   const mine = await hashTree(o.toolSrc ?? TOOL_SRC);
   const memory = await hashTree(join(o.base, "vendor", "alfredish", "src"));
   if (memory !== null && mine !== memory) {
-    const pinned = (await readFile(join(o.base, "vendor", "alfredish", "PINNED"), "utf8").catch(() => "?")).trim();
-    out.push(`this alfred-approve is not the Alfredish this memory uses (${pinned}), so it could misread it — reinstall alfred-approve from that version (sudo sh scripts/install-approve.sh in Alfredish), then run it again`);
+    const pinned = (await readFile(join(o.base, "vendor", "alfredish", "PINNED"), "utf8").catch(() => "")).trim();
+    const commit = /^[0-9a-f]{7,40}$/.test(pinned) ? pinned : undefined;
+    out.push({ message: `this alfred-approve is not the Alfredish this memory uses (${pinned || "?"}), so it could misread it`, ...(commit && { update: commit }) });
   }
-  if (o.invalid.length) out.push(`${o.invalid.length} definition${o.invalid.length === 1 ? "" : "s"} cannot be read: ${o.invalid.join(", ")} — fix them first (alfred check shows why)`);
-  for (const c of o.changes) if (c.op === "-" && PAST_KINDS.has(c.kind)) out.push(`${c.id} is a past record (${c.kind}) and would be marked removed — the past is never removed (K5); this is a bug or tampering`);
+  if (o.invalid.length) out.push({ message: `${o.invalid.length} definition${o.invalid.length === 1 ? "" : "s"} cannot be read: ${o.invalid.join(", ")} — fix them first (alfred check shows why)` });
+  for (const c of o.changes) if (c.op === "-" && PAST_KINDS.has(c.kind)) out.push({ message: `${c.id} is a past record (${c.kind}) and would be marked removed — the past is never removed (K5); this is a bug or tampering` });
   return out;
+}
+
+/**
+ * When the tool runs another Alfredish than the memory, it updates itself to the memory's commit with its own
+ * root-owned installer (sudo asks the owner's password) and starts again — once: if the copy still differs after the
+ * update, the memory's copy is not that commit and the round does not start.
+ */
+export function selfUpdate(blockers: readonly Blocker[], o: { lib: string; env: NodeJS.ProcessEnv; exists: (p: string) => boolean }): { run: string[] } | { refuse: string } | undefined {
+  const update = blockers.find((b) => b.update)?.update;
+  if (!update) return undefined;
+  if (o.env["ALFREDISH_UPDATED_TO"] === update) return { refuse: `alfred-approve was updated to Alfredish ${update}, yet the memory's copy still differs: vendor/alfredish is not exactly that commit` };
+  const installer = join(o.lib, "install-approve.sh");
+  if (!o.exists(installer)) return { refuse: "this alfred-approve cannot update itself (no installer next to it): run the first install from Alfredish" };
+  return { run: ["/usr/bin/sudo", "/bin/sh", installer, "--update", update] };
 }
 
 /** Where this copy of Alfredish was installed from (written by scripts/install-approve.sh). */
@@ -258,8 +281,21 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const changes = changesSince(o.state, o.snap, tty && !process.env["NO_COLOR"] ? COLOURS : PLAIN);
   const blockers = await approveBlockers({ base: o.base, invalid: o.invalid ?? [], changes });
+  const plan = selfUpdate(blockers, { lib: dirname(TOOL_SRC), env: process.env, exists: existsSync });
+  if (plan && "run" in plan) {
+    const commit = plan.run[plan.run.length - 1]!;
+    console.log(`alfred-approve is updating itself to Alfredish ${commit}, the version this memory uses (sudo asks for your password).`);
+    const [sudo, ...args] = plan.run;
+    const r = spawnSync(sudo!, args, { stdio: "inherit" });
+    if (r.status !== 0) {
+      console.log("Update failed — nothing shown, nothing signed.");
+      return 1;
+    }
+    return spawnSync(process.execPath, process.argv.slice(1), { stdio: "inherit", env: { ...process.env, ALFREDISH_UPDATED_TO: commit } }).status ?? 1;
+  }
   if (blockers.length) {
-    console.log(`Not started — nothing shown, nothing signed:\n${blockers.map((b) => `✗ ${b}`).join("\n")}`);
+    const lines = [...(plan && "refuse" in plan ? [plan.refuse] : []), ...blockers.filter((b) => !b.update || !plan).map((b) => b.message)];
+    console.log(`Not started — nothing shown, nothing signed:\n${lines.map((l) => `✗ ${l}`).join("\n")}`);
     return 1;
   }
   const vendor = await hashTree(join(o.base, "vendor", "alfredish"));
