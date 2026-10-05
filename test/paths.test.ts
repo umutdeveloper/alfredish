@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { checkLocalPaths, MUST_CATCH, MUST_PASS, namesMachinePath } from "../src/paths.ts";
-import { file, local, promise, session } from "../src/dsl.ts";
+import { confirm, file, local, promise, session } from "../src/dsl.ts";
 import { collect } from "../src/compiler.ts";
 import { snapshot } from "../src/snapshot.ts";
 import { confirmedPaths } from "../src/paths.ts";
@@ -43,6 +43,16 @@ describe("K30 — a confirmed path inside a test", () => {
     const { defs } = collect([p]);
     expect(checkLocalPaths(snapshot(defs)).map((i) => i.id)).toEqual(["promise.moveAda"]); // without the definitions
     expect(checkLocalPaths(snapshot(defs), confirmedPaths(defs))).toEqual([]);
+  });
+
+  it("still counts when another definition that rests on it is read first", () => {
+    const s = session({ id: "s", title: "s", at: "2026-10-05", topic: "t", questions: ["?"] });
+    const where = local("/Users/someone/memories/golive/memory/index.ts", { confirmedBy: "owner", at: "2026-10-05" });
+    const move = promise({ id: "promise.moveGoLive", title: "Move GoLive", origin: s, owner: "agent", due: "2026-10-26", requires: [], doneWhen: file(where).exists(), evidence: "live" });
+    const after = promise({ id: "promise.keys", title: "Keys", origin: s, owner: "agent", due: "2026-11-16", requires: [move], doneWhen: confirm({ by: "owner", what: "keys everywhere" }), evidence: "human" });
+    const { defs } = collect([after, move]);
+    const first = [after, ...defs.filter((d) => d !== after)];
+    expect(checkLocalPaths(snapshot(defs), confirmedPaths(first))).toEqual([]);
   });
 });
 

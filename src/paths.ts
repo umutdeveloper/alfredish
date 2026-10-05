@@ -30,11 +30,13 @@ export function confirmedPaths(defs: readonly unknown[]): Set<string> {
   const out = new Set<string>();
   const seen = new Set<unknown>();
   const walk = (x: unknown, top: boolean) => {
-    if (!x || typeof x !== "object" || seen.has(x)) return;
-    seen.add(x);
+    if (!x || typeof x !== "object") return;
     const o = x as Record<string, unknown>;
+    // Another definition is walked on its own turn; marking it seen here would skip it then.
+    if (!top && typeof o["id"] === "string" && typeof o["origin"] === "object") return;
+    if (seen.has(x)) return;
+    seen.add(x);
     if (o["kind"] === "local" && typeof o["path"] === "string" && o["confirmedBy"] === "owner") return void out.add(o["path"]);
-    if (!top && typeof o["id"] === "string" && typeof o["origin"] === "object") return; // another definition: its own walk
     for (const v of Object.values(o)) walk(v, false);
   };
   for (const d of defs) walk(d, true);
