@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkHistory, checkImports, checkNewEvents, checkNewKeys, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkHistory, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
 import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals, vendorDir } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
@@ -137,7 +137,9 @@ done
         console.log(approvals.issues.map((i) => `✗ ${i.id} — ${i.rule}: ${i.message}`).join("\n"));
         return 1;
       }
-      return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, invalid: [...invalid.keys()].map((d) => d.id), ...(agentSocket && { agentSocket }) });
+      // A past record may be offered for removal only when it moved into another memory that signed it (K5).
+      const moved = new Set([...(await movedAway(snap, day, ctx))].filter(([, m]) => !m.why).map(([id]) => id));
+      return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, invalid: [...invalid.keys()].map((d) => d.id), moved, ...(agentSocket && { agentSocket }) });
     }
     case "keys": {
       const keys = defs.filter((d): d is KeyDef => d.kind === "key");

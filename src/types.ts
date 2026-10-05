@@ -181,6 +181,8 @@ export interface EventDef {
   affects: readonly (Def | RetiredRef)[];
   /** Ids of present-tense definitions removed on this event's day (K20). */
   retires?: readonly string[];
+  /** Definitions (past ones too) that moved on this event's day into another memory, where the owner signed them (K5, K20). */
+  moves?: { memory: string; ids: readonly string[] };
   /** K29: close events (by meaning) it was compared with and that tell another happening. */
   distinctFrom?: readonly EventDef[];
   /** K29: the earlier event that told this happening wrongly; this one corrects it. */

@@ -89,7 +89,7 @@ it does not add a second one.
 | Type | What | Required fields | Rule |
 |---|---|---|---|
 | `session` | A working session | `at`, `topic`, `questions` | The session note and log line are generated from it and from the definitions born in it |
-| `event` | Something that happened | `at`, `text`; optional `affects`, `distinctFrom` / `corrects` (K29), `retires` (ids of present-tense definitions removed that day, K20) | Immutable once its day has passed |
+| `event` | Something that happened | `at`, `text`; optional `affects`, `distinctFrom` / `corrects` (K29), `moves` (`{ memory, ids }`: definitions, past ones too, that moved into another memory that day), `retires` (ids of present-tense definitions removed that day, K20) | Immutable once its day has passed |
 | `research` | A piece of research | `at`, `question`, `findings`, `readWhen`; optional `rawData` | Its readable page is generated from the findings. Immutable once its day has passed |
 
 **Finding:** one result of a research. `text`, optional `value`, optional `source` (URL or a place in `rawData`).
@@ -158,7 +158,10 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   unless an `event` dated today lists its id in `retires` (its `text` says why). Compared with `HEAD`; once owner
   approval exists, with the last signed record. A past event that `affects` a retired definition names it with
   `retired("<id>")`, which is recorded exactly like the live reference was, so the past is unchanged (K5); red if the id
-  still exists or no event retires it.
+  still exists or no event retires it. A definition (of any kind, past ones too, K5) may also leave because it **moved** into another
+  memory: an event dated today lists it in `moves: { memory, ids }`, and that memory's owner-signed state holds it
+  (read as in §9.2); until the owner approves it there, it may not leave. Keys are covered like other present-tense
+  definitions.
 - **K21 — No back-dating:** a definition that is not in the last commit must be born in a session that is not in the last
   commit either (the session being written now) or in a session dated today. Red otherwise: "born in s.X, which is
   already committed: use the current session". Compared with `HEAD`; once owner approval exists, with the last signed

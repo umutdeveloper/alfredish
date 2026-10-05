@@ -268,7 +268,7 @@ export interface Blocker {
   update?: string;
 }
 
-export async function approveBlockers(o: { base: string; invalid: readonly string[]; changes: readonly Change[]; toolSrc?: string }): Promise<Blocker[]> {
+export async function approveBlockers(o: { base: string; invalid: readonly string[]; changes: readonly Change[]; toolSrc?: string; moved?: ReadonlySet<string> }): Promise<Blocker[]> {
   const out: Blocker[] = [];
   const mine = await hashTree(o.toolSrc ?? TOOL_SRC);
   const memory = await hashTree(join(vendorDir(o.base), "src"));
@@ -278,7 +278,7 @@ export async function approveBlockers(o: { base: string; invalid: readonly strin
     out.push({ message: `this alfred-approve is not the Alfredish this memory uses (${pinned || "?"}), so it could misread it`, ...(commit && { update: commit }) });
   }
   if (o.invalid.length) out.push({ message: `${o.invalid.length} definition${o.invalid.length === 1 ? "" : "s"} cannot be read: ${o.invalid.join(", ")} — fix them first (alfred check shows why)` });
-  for (const c of o.changes) if (c.op === "-" && PAST_KINDS.has(c.kind)) out.push({ message: `${c.id} is a past record (${c.kind}) and would be marked removed — the past is never removed (K5); this is a bug or tampering` });
+  for (const c of o.changes) if (c.op === "-" && PAST_KINDS.has(c.kind) && !o.moved?.has(c.id)) out.push({ message: `${c.id} is a past record (${c.kind}) and would be marked removed — the past is never removed (K5); this is a bug or tampering` });
   return out;
 }
 
@@ -303,10 +303,10 @@ async function installedFrom(): Promise<string | undefined> {
 }
 
 /** The terminal dialogue (run by the owner): the arrow-key screen in a terminal, plain questions otherwise. */
-export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate; invalid?: readonly string[] }): Promise<number> {
+export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate; invalid?: readonly string[]; moved?: ReadonlySet<string> }): Promise<number> {
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const changes = changesSince(o.state, o.snap, tty && !process.env["NO_COLOR"] ? COLOURS : PLAIN);
-  const blockers = await approveBlockers({ base: o.base, invalid: o.invalid ?? [], changes });
+  const blockers = await approveBlockers({ base: o.base, invalid: o.invalid ?? [], changes, ...(o.moved && { moved: o.moved }) });
   const plan = selfUpdate(blockers, { lib: dirname(TOOL_SRC), env: process.env, exists: existsSync });
   if (plan && "run" in plan) {
     const commit = plan.run[plan.run.length - 1]!;

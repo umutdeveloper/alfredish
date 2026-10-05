@@ -84,18 +84,41 @@ export async function checkPast(snap: Snapshot, today: ISODate, o: RepoOptions, 
   const head = reference ?? (await snapshotAt("HEAD", o)); // K28: the signed state when there is one
   if (!head) return [];
   const issues: Issue[] = [];
+  const moved = await movedAway(snap, today, o.ctx);
   for (const [id, old] of Object.entries(head)) {
     if (!PAST.has(old.kind)) continue;
     const at = String(old.data["at"] ?? "");
     if (!(at < today)) continue; // same day: corrections allowed
     const now = snap[id];
-    if (!now) issues.push({ id, status: "red", rule: "K5", message: `past deleted (${at})` });
+    const mv = moved.get(id);
+    if (!now && mv) {
+      if (mv.why) issues.push(movedIssue(id, "K5", mv)); // kept nowhere else yet: it may not leave
+    } else if (!now) issues.push({ id, status: "red", rule: "K5", message: `past deleted (${at})` });
     else if (now.hash !== old.hash) issues.push({ id, status: "red", rule: "K5", message: `past changed (${at})` });
   }
   return issues;
 }
 
-const PRESENT_KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "link"]);
+const PRESENT_KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "link", "key"]);
+
+/**
+ * K5, K20: definitions an event dated today says moved into another memory, each with whether that memory's owner-signed
+ * state really holds it (only then may it leave this memory).
+ */
+export async function movedAway(snap: Snapshot, today: ISODate, ctx: ProbeContext): Promise<Map<string, { memory: string; why?: string }>> {
+  const out = new Map<string, { memory: string; why?: string }>();
+  for (const e of Object.values(snap)) {
+    const m = e.data["moves"] as { memory?: unknown; ids?: unknown } | undefined;
+    if (e.kind !== "event" || e.data["at"] !== today || !m || typeof m.memory !== "string" || !Array.isArray(m.ids)) continue;
+    for (const id of m.ids.map(String)) {
+      const r = ctx.signed ? await ctx.signed(m.memory, id, "") : { why: "other memories cannot be read here" };
+      out.set(id, "why" in r ? { memory: m.memory, why: r.why } : { memory: m.memory });
+    }
+  }
+  return out;
+}
+const movedIssue = (id: string, rule: string, mv: { memory: string; why?: string }): Issue =>
+  ({ id, status: "red", rule, message: `moved to ${mv.memory}, but ${mv.why} — the owner approves it there first` });
 const refId = (x: unknown) => (typeof x === "string" && x.startsWith("@") ? x.slice(1) : undefined);
 
 /**
@@ -111,8 +134,14 @@ export async function checkHistory(snap: Snapshot, today: ISODate, o: RepoOption
   for (const e of Object.values(snap)) {
     if (e.kind === "event" && e.data["at"] === today && Array.isArray(e.data["retires"])) for (const id of e.data["retires"]) retired.add(String(id));
   }
+  const moved = await movedAway(snap, today, o.ctx);
   for (const [id, old] of Object.entries(head)) {
     if (!PRESENT_KINDS.has(old.kind) || snap[id] || retired.has(id)) continue;
+    const mv = moved.get(id);
+    if (mv) {
+      if (mv.why) issues.push(movedIssue(id, "K20", mv));
+      continue;
+    }
     issues.push({ id, status: "red", rule: "K20", message: `removed since the last commit — record it in an event dated ${today} with retires: ["${id}"] and say why` });
   }
   for (const [id, now] of Object.entries(snap)) {
