@@ -94,7 +94,7 @@ export async function checkPast(snap: Snapshot, today: ISODate, o: RepoOptions, 
   return issues;
 }
 
-const PRESENT_KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule"]);
+const PRESENT_KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "link"]);
 const refId = (x: unknown) => (typeof x === "string" && x.startsWith("@") ? x.slice(1) : undefined);
 
 /**

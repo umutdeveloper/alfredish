@@ -2,11 +2,11 @@
 // shapeProblems never throws: it is what keeps a malformed definition from crashing the rest of the compiler.
 import type { Def } from "./types.ts";
 
-const KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "session", "event", "research", "key"]);
-const PRESENT = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule"]);
+const KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "link", "session", "event", "research", "key"]);
+const PRESENT = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "link"]);
 const EVIDENCE = new Set(["live", "source", "human", "research", "codeRead", "secondHand"]);
 const CONDITIONS = new Set(["probe", "confirm", "after", "derived"]);
-const VERIFIES = new Set([...CONDITIONS, "agentProbe", "source", "fromFinding", "review"]);
+const VERIFIES = new Set([...CONDITIONS, "agentProbe", "source", "fromFinding", "review", "linked"]);
 
 type Obj = Record<string, unknown>;
 const isObj = (x: unknown): x is Obj => typeof x === "object" && x !== null && !Array.isArray(x);
@@ -18,7 +18,7 @@ export const looksLikeDef = (x: unknown): x is Obj => isObj(x) && isStr(x["id"])
 const isDefOf = (x: unknown, kinds?: Set<string>) => looksLikeDef(x) && KINDS.has(x["kind"] as string) && (!kinds || kinds.has(x["kind"] as string));
 
 const FIX = {
-  verify: "give it a test (SPEC §5): a probe, review, source, fromFinding, agentProbe, confirm, after or derived",
+  verify: "give it a test (SPEC §5): a probe, review, source, fromFinding, agentProbe, confirm, after, derived or linked",
   evidence: `set evidence to one of ${[...EVIDENCE].join(", ")}`,
   origin: "set origin to the session it was written in",
   link: "link only to definitions (import the exported definition)",
@@ -35,6 +35,7 @@ function verifyProblems(v: unknown, field: string, onlyConditions = false): stri
   const need = (ok: boolean, what: string) => { if (!ok) out.push(`${field} (${k}): ${what}`); };
   if (k === "probe") need(isStr(v["describe"]) && typeof v["run"] === "function", "needs a description and a test to run");
   if (k === "agentProbe") need(isStr(v["describe"]) && isDuration(v["ttl"]), "needs a description and a ttl like 30d");
+  if (k === "linked") need(isStr(v["memory"]) && isStr(v["target"]) && isStr(v["hash"]) && /^[0-9a-f]{16}$/.test(String(v["hash"])) && EVIDENCE.has(v["evidence"] as string), "needs memory, target, hash (16 hex) and evidence");
   if (k === "source") need(isStr(v["url"]) && isDate(v["readAt"]) && isDuration(v["ttl"]), "needs url, readAt (YYYY-MM-DD) and ttl");
   if (k === "fromFinding") need(isObj(v["finding"]) && isDefOf((v["finding"] as Obj)["research"], new Set(["research"])) && isDuration(v["ttl"]), "needs a finding of a research and a ttl");
   if (k === "review") need(v["by"] === "owner" && isDate(v["at"]) && isDuration(v["every"]), 'needs by: "owner", at (YYYY-MM-DD) and every (like 90d)');
@@ -154,6 +155,11 @@ export function shapeProblems(x: unknown): string[] {
       str("login");
       if (d["owner"] !== "owner" && d["owner"] !== "agent") out.push('owner must be "owner" or "agent"');
       if (!["browserSession", "apiToken", "none"].includes(d["agentAccess"] as string)) out.push("agentAccess must be browserSession, apiToken or none");
+      break;
+    case "link":
+      str("memory");
+      str("target");
+      if (!isObj(d["verify"]) || d["verify"]["kind"] !== "linked") out.push("a link is verified by linked() — build it with link()");
       break;
     case "asset":
       if (!isDefOf(d["on"], new Set(["account"]))) out.push(`on is not an account — ${FIX.link}`);

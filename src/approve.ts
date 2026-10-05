@@ -128,7 +128,7 @@ export function groupOf(op: Op, kind: string, data: Record<string, unknown> | un
   if (isLocal(data["location"]) || isLocal(data["where"])) return "owner";
   // Machine-checked only when a built-in probe looks at the world (not cmd, whose command the owner must judge).
   const verify = String(data["verify"] ?? "");
-  return /^(page|http|header|file|git|domain|github|dns|all of:) /.test(verify) && !verify.includes(" — runs: ") ? "machine" : "owner";
+  return /^(page|http|header|file|git|domain|github|dns|all of:|linked to) /.test(verify) && !verify.includes(" — runs: ") ? "machine" : "owner";
 }
 
 function reasons(snap: Snapshot): Map<string, string> {

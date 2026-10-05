@@ -35,7 +35,12 @@ export interface ProbeResult {
   detail?: string;
 }
 
+/** A definition of another memory as its owner signed it, and its signed content at an earlier hash if there was one. */
+export type SignedLookup = { hash: string; data: Readonly<Record<string, unknown>>; was?: Readonly<Record<string, unknown>> } | { why: string };
+
 export interface ProbeContext {
+  /** §9.2: reads another memory's signed state (only from memories registered on this machine). */
+  signed?(memory: string, id: string, pinned: string): Promise<SignedLookup>;
   fetchText(url: string): Promise<{ status: number; headers: Headers; body: string }>;
   fileExists(path: string): Promise<boolean>;
   run(cmd: string, args: string[], cwd?: string): Promise<{ code: number; stdout: string }>;
@@ -97,7 +102,20 @@ export interface AfterVerify {
 /** Conditions "come true" when satisfied (SPEC §5). */
 export type Condition = ProbeVerify | ConfirmVerify | AfterVerify | DerivedVerify;
 
-export type Verify = Condition | AgentProbeVerify | SourceVerify | FromFindingVerify | ReviewVerify;
+/**
+ * Another memory's definition, as its owner signed it (§9.2): green while its signed content still has the pinned hash,
+ * yellow once it changed, red when it cannot be read.
+ */
+export interface LinkedVerify {
+  kind: "linked";
+  memory: string;
+  target: string;
+  hash: string;
+  /** The target's evidence when it was linked; checked against the signed content. */
+  evidence: Evidence;
+}
+
+export type Verify = Condition | AgentProbeVerify | SourceVerify | FromFindingVerify | ReviewVerify | LinkedVerify;
 
 // ---- past-tense types ----
 
@@ -249,6 +267,12 @@ export interface AssetDef<E extends Evidence = Evidence> extends Present<"asset"
   location: Location;
 }
 
+/** §9.2: a definition of another memory on this machine that this memory rests on. */
+export interface LinkDef<E extends Evidence = Evidence> extends Present<"link", E> {
+  memory: string;
+  target: string;
+}
+
 export interface RuleDef<E extends Evidence = Evidence> extends Present<"rule", E> {
   text: string;
   appliesTo: string;
@@ -264,7 +288,8 @@ export type PresentDef<E extends Evidence = Evidence> =
   | IdeaDef<E>
   | AccountDef<E>
   | AssetDef<E>
-  | RuleDef<E>;
+  | RuleDef<E>
+  | LinkDef<E>;
 
 export type PastDef = SessionDef | EventDef | ResearchDef;
 export type Def = PresentDef | PastDef | KeyDef;

@@ -220,6 +220,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 | `alfred diff <a>[..<b>]` | **Meaning-level** difference between two dates or commits | Definition by definition, not line by line |
 | `alfred build` | Generates every view (K6) | Changed files |
 | `alfred hook` | Installs a pre-commit hook in the memory repository: `alfred check` before every commit | Hook path |
+| `alfred link <memory> <id>` | The `link({...})` to write for that definition of another memory, from its signed state | One line |
 | `alfred keys <subject>` / `alfred keys --like "<text>"` | The subject's keys; with `--like`, every key of any subject at or above the K23 threshold, with its score (to look before opening a new key) | One line per key |
 
 **Live probes.** Every probe a run needs starts at once (at most 16 at a time), and each probe runs at most once per run.
@@ -247,6 +248,24 @@ nomic-embed-text-v1.5 (Q4_K_M, Apache-2.0), run in-process with llama.cpp (node-
 application. The text compared is `clustering: <name> — <describe>`; similarity is the cosine of the two vectors. If
 the model is missing, altered (hash mismatch) or cannot run, K23 is red ("cannot compare keys") — it never passes
 unseen.
+
+### 9.2 Links to other memories
+
+A memory may rest on a definition of another memory on the same machine with a `link` (`link({ id, title, origin,
+memory, target, hash, evidence })`; `alfred link <memory> <id>` prints the values to write). It pins the target's hash
+and evidence as its owner signed them. The check reads the other memory's **signed state** (its approval records,
+checked against the anchor, K27), never its files, so nothing unsigned there and nothing an agent writes here can make
+a link green:
+
+- the signed target still has the pinned hash (and evidence) → **green**;
+- its owner signed a change → **yellow**, naming each changed field from the earlier record that has the pinned hash;
+  whatever rests on the link turns yellow (K3). Look again, change what rested on it if needed, re-link (a change the
+  owner approves here);
+- the memory is not registered on this machine, its records do not check out, or the target is not in its signed
+  state → **red**. All memories live on one owner's machine, so an unreadable one is a fault, never "unknown".
+
+Where the memories are is the machine's, not a memory's (K15): `~/.alfredish/memories.json`, `{ "<name>": "<folder>" }`
+(overridable with `ALFREDISH_MEMORIES`). A link nothing rests on is red (K12).
 ## 10. Agent rules (for every agent using Alfredish)
 
 1. At session start run `alfred check`, then read only `NOW.md`. During the session use `alfred check --quick` or

@@ -36,6 +36,7 @@ const SECTIONS: [Def["kind"], string][] = [
   ["fact", "Facts"],
   ["account", "Accounts"],
   ["asset", "Assets"],
+  ["link", "Links to other memories"],
   ["rule", "Rules"],
   ["research", "Research"],
   ["event", "Events"],

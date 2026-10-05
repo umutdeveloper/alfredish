@@ -5,7 +5,7 @@ import { chmod, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
-import { nodeContext } from "./context.ts";
+import { nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
 import { areaDefs, checkHistory, checkImports, checkNewEvents, checkNewKeys, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
@@ -22,7 +22,7 @@ function today(): ISODate {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` as ISODate;
 }
 
-const USAGE = "usage: alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>] | keys <subject> | keys --like \"<text>\" | approve [--agent <ssh-agent socket>]  [--memory memory/index.ts]";
+const USAGE = "usage: alfred check [<area>] [--quick] | build | hook | get <id> | why <id> | diff <a>[..<b>] | keys <subject> | keys --like \"<text>\" | approve [--agent <ssh-agent socket>] | link <memory> <id>  [--memory memory/index.ts]";
 
 async function main(argv: string[]): Promise<number> {
   const args = [...argv];
@@ -34,8 +34,8 @@ async function main(argv: string[]): Promise<number> {
   const like = li >= 0 ? args.splice(li, 2)[1] : undefined;
   const qi = args.indexOf("--quick");
   const quick = qi >= 0 && args.splice(qi, 1).length > 0;
-  const [cmd, arg] = args;
-  if (!cmd || !["check", "build", "hook", "get", "why", "diff", "keys", "approve"].includes(cmd) || (["get", "why", "diff"].includes(cmd) && !arg) || (cmd === "keys" && !arg && like === undefined)) {
+  const [cmd, arg, arg2] = args;
+  if (!cmd || !["check", "build", "hook", "get", "why", "diff", "keys", "approve", "link"].includes(cmd) || (["get", "why", "diff"].includes(cmd) && !arg) || (cmd === "keys" && !arg && like === undefined) || (cmd === "link" && !arg2)) {
     console.error(USAGE);
     return 2;
   }
@@ -51,6 +51,16 @@ async function main(argv: string[]): Promise<number> {
     await writeFile(hook, `#!/bin/sh\n# installed by alfredish\ncd "$(git rev-parse --show-toplevel)" || exit 1\n${typecheck}\nnode "${cli}" check --memory "${rel}" || { echo "alfred check is red: commit stopped"; exit 1; }\n`);
     await chmod(hook, 0o755);
     console.log(`installed: ${hook}`);
+    return 0;
+  }
+  if (cmd === "link") {
+    // §9.2: what to write to rest on another memory's definition, read from that memory's signed state.
+    const r = await readSigned(arg!, arg2!, "");
+    if ("why" in r) {
+      console.error(`${arg}:${arg2}: ${r.why}`);
+      return 1;
+    }
+    console.log(`link({ id: "link.${arg}.${arg2}", title: ${JSON.stringify(String(r.data["title"] ?? arg2))}, origin: <this session>, memory: "${arg}", target: "${arg2}", hash: "${r.hash}", evidence: "${String(r.data["evidence"])}" })`);
     return 0;
   }
   const ctx = nodeContext(base);

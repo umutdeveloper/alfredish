@@ -33,6 +33,7 @@ import type {
   SourceVerify,
   Verify,
   RetiredRef,
+  LinkDef,
 } from "./types.ts";
 
 type Spec<T> = Omit<T, "kind">;
@@ -79,6 +80,11 @@ export const decision = <E extends Evidence>(d: Spec<DecisionDef<E>>): DecisionD
 export const account = <E extends Evidence>(d: Spec<AccountDef<E>>): AccountDef<E> => ({ kind: "account", ...d });
 export const asset = <E extends Evidence>(d: Spec<AssetDef<E>>): AssetDef<E> => ({ kind: "asset", ...d });
 export const rule = <E extends Evidence>(d: Spec<RuleDef<E>>): RuleDef<E> => ({ kind: "rule", ...d });
+/** §9.2: rest on another memory's definition as its owner signed it (`alfred link <memory> <id>` prints hash and evidence). */
+export const link = <E extends Evidence>(d: { id: string; title: string; origin: SessionDef; memory: string; target: string; hash: string; evidence: E }): LinkDef<E> => ({
+  kind: "link", id: d.id, title: d.title, origin: d.origin, memory: d.memory, target: d.target, evidence: d.evidence,
+  verify: { kind: "linked", memory: d.memory, target: d.target, hash: d.hash, evidence: d.evidence },
+});
 
 export const promise = <E extends Evidence>(
   d: Omit<Spec<PromiseDef<E>>, "verify"> & { doneWhen: Verify },

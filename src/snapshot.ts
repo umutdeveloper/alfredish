@@ -5,7 +5,7 @@ import type { Def, Verify } from "./types.ts";
 
 export type Snapshot = Record<string, { kind: string; hash: string; data: Record<string, unknown> }>;
 
-const VERIFY_KINDS = new Set(["probe", "agentProbe", "source", "fromFinding", "review", "confirm", "after", "derived"]);
+const VERIFY_KINDS = new Set(["probe", "agentProbe", "source", "fromFinding", "review", "confirm", "after", "derived", "linked"]);
 
 export function describeVerify(v: Verify): string {
   switch (v.kind) {
@@ -15,6 +15,8 @@ export function describeVerify(v: Verify): string {
       return `agent: ${v.describe} (ttl ${v.ttl}${v.last ? `, last ${v.last.at} ${v.last.ok ? "ok" : "failed"}` : ""})`;
     case "source":
       return `source ${v.url} (read ${v.readAt}, ttl ${v.ttl})`;
+    case "linked":
+      return `linked to ${v.memory}:${v.target} (signed ${v.hash.slice(0, 16)}, evidence ${v.evidence})`;
     case "fromFinding":
       return `finding ${v.finding.research?.id ?? "?"}#${v.finding.key} (ttl ${v.ttl})`;
     case "review":

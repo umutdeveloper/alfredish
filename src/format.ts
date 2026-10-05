@@ -42,6 +42,8 @@ export function valueOf(d: Def): string {
       return d.topic;
     case "key":
       return `${d.valueType} · ${d.describe}`;
+    case "link":
+      return `${d.memory}:${d.target}`;
   }
 }
 

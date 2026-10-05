@@ -40,7 +40,7 @@ type Outcome = { status: Status; reason?: string };
 /** Probe outcomes of one run: each probe runs at most once (SPEC §9). */
 type Probes = ReadonlyMap<ProbeVerify, Promise<Outcome>>;
 
-const PRESENT = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule"]);
+const PRESENT = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "link"]);
 const KINDS = new Set([...PRESENT, "session", "event", "research", "key"]);
 const ROOTS = new Set(["decision", "claim", "goal", "promise", "rule", "asset", "idea"]);
 const RANK: Record<Status, number> = { green: 0, yellow: 1, unknown: 2, red: 3 };
@@ -164,9 +164,26 @@ export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext, p
       return today >= v.date ? { status: "green" } : { status: "red", reason: `not before ${v.date}` };
     case "derived":
       return { status: "green" }; // inputs are handled by propagation (K3)
+    case "linked": {
+      const at = `${v.memory}:${v.target}`;
+      if (!ctx.signed) return { status: "red", reason: `${at}: other memories cannot be read here` };
+      const r = await ctx.signed(v.memory, v.target, v.hash);
+      if ("why" in r) return { status: "red", reason: `${at}: ${r.why}` };
+      if (r.hash !== v.hash) return { status: "yellow", reason: `${at} changed since it was linked (${changedFields(r.was, r.data)}) — look again, then re-link` };
+      if (r.data["evidence"] !== v.evidence) return { status: "red", reason: `${at}: linked with evidence "${v.evidence}", signed with "${String(r.data["evidence"])}"` };
+      return { status: "green" };
+    }
     default:
       return { status: "red", reason: "K16: malformed verification" };
   }
+}
+
+/** What changed in a linked definition, field by field, as short as it stays readable. */
+function changedFields(was: Readonly<Record<string, unknown>> | undefined, now: Readonly<Record<string, unknown>>): string {
+  const show = (x: unknown) => { const t = typeof x === "string" ? x : JSON.stringify(x); return t === undefined ? "∅" : t.length > 80 ? `${t.slice(0, 77)}…` : t; };
+  if (!was) return "its earlier signed content is not in its records";
+  const keys = [...new Set([...Object.keys(was), ...Object.keys(now)])].filter((k) => JSON.stringify(was[k]) !== JSON.stringify(now[k]));
+  return keys.map((k) => `${k}: ${show(was[k])} → ${show(now[k])}`).join("; ") || "no field differs";
 }
 
 /** A condition "comes true" when satisfied; a derived condition when every input is satisfied (SPEC §5). */
@@ -261,6 +278,7 @@ const CEILING: Partial<Record<Verify["kind"], string>> = {
 /** The strongest evidence a definition's verification can give (derived: the weakest of its inputs). */
 export function evidenceCeiling(d: PresentDef, seen = new Set<Def>()): string {
   const v = d.verify;
+  if (v.kind === "linked") return v.evidence; // checked against the signed target at every look
   if (v.kind !== "derived") return CEILING[v.kind] ?? "secondHand";
   let weakest = "live";
   for (const x of v.from) {
@@ -404,6 +422,7 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     if ((await conditionStatus(p.revisitWhen, o.today, o.ctx, probes)) === "green") issues.push({ id, status: "yellow", rule: "K12", message: `parked, revisit condition came true: ${p.reason}` });
   };
   for (const d of defs) {
+    if (d.kind === "link" && !used.has(d)) issues.push({ id: d.id, status: "red", rule: "K12", message: "unused (nothing rests on this link)" });
     if (d.kind === "fact" && !used.has(d)) {
       if (d.parked) await parkedCheck(d.id, d.parked);
       else issues.push({ id: d.id, status: "red", rule: "K12", message: "unused (supports nothing and is not parked)" });
