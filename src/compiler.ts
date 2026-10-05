@@ -488,6 +488,11 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     const k = "key" in d && d.key && typeof d.key === "object" ? d.key.id : undefined;
     if (k) byKey.set(`${d.kind}\0${k}`, [...(byKey.get(`${d.kind}\0${k}`) ?? []), d]);
   }
+  // Every present-tense kind but facts (keyed above), links and keys names the question it answers.
+  const KEYED = new Set(["decision", "rule", "promise", "goal", "idea", "asset", "account", "claim"]);
+  for (const d of defs) {
+    if (KEYED.has(d.kind) && !("key" in d && d.key)) issues.push({ id: d.id, status: "red", rule: "K22", message: `${d.kind} names no key — give it the key of the question it answers (alfred keys --like "<question>" finds an existing one)` });
+  }
   const PLURAL: Record<string, string> = { research: "research records" };
   const LINK: Record<string, string> = { decision: "supersedes", promise: "renews", goal: "renews", research: "repeats" };
   const earlier = (d: Def): Def | undefined =>

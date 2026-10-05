@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { linkedFromOthers, memoriesOnMachine, nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkDrops, checkHistory, headSnapshot, judgeDrops, linkLine, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkDrops, checkResearchKeys, checkHistory, headSnapshot, judgeDrops, linkLine, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
 import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals, vendorDir } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
@@ -121,6 +121,7 @@ done
         ...ownerRules(defs, linked),
         ...(await checkPast(snap, day, repo, reference)),
         ...(await checkDrops(snap, day, reference ?? (await headSnapshot(repo)), undefined, signed?.removed)),
+        ...checkResearchKeys(snap, reference ?? (await headSnapshot(repo))),
         ...(await checkImports(repo)),
         ...(await checkTypeEscapes(repo)),
         ...(await checkHistory(snap, day, repo, reference)),

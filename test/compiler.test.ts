@@ -198,7 +198,7 @@ describe("K12 — self facts, rule and idea bases", () => {
 
   it("a rule's restsOn counts as use and propagates red", async () => {
     const bias = fact({ id: "f.bias", key: tk("f.bias", s1), title: "bias", origin: s1, value: "x", verify: page("https://s").contains("bias"), evidence: "live" });
-    const r1 = rule({ id: "r.us", title: "say you are in the US", origin: s1, text: "t", appliesTo: "measurement", restsOn: [bias], verify: reviewed, evidence: "human" });
+    const r1 = rule({ key: tk("r.us", s1), id: "r.us", title: "say you are in the US", origin: s1, text: "t", appliesTo: "measurement", restsOn: [bias], verify: reviewed, evidence: "human" });
     const green = await compile([r1], { today, ctx: fakeCtx({ "https://s": { body: "bias" } }) });
     expect(green.issues).toEqual([]);
     const red = await compile([r1], { today, ctx: fakeCtx({ "https://s": { body: "" } }) });
@@ -247,8 +247,8 @@ describe("ids and output", () => {
   });
 
   it("prints a single line when everything is green", async () => {
-    const r1 = rule({ id: "r", title: "r", origin: s1, text: "English commits", appliesTo: "git", verify: reviewed, evidence: "human" });
+    const r1 = rule({ key: tk("r", s1), id: "r", title: "r", origin: s1, text: "English commits", appliesTo: "git", verify: reviewed, evidence: "human" });
     const r = await compile([r1], { today, ctx: fakeCtx() });
-    expect(formatCheck(r)).toBe("✓ 2 definitions · 1 tests · 100% · 0 parked");
+    expect(formatCheck(r)).toBe("✓ 3 definitions · 1 tests · 100% · 0 parked");
   });
 });

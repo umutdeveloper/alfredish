@@ -69,6 +69,14 @@ export async function checkViews(views: readonly View[], snap: Snapshot, o: Repo
   return issues;
 }
 
+/** K22: a research new since the reference names its key the day it is written; a past one cannot change (K5). */
+export function checkResearchKeys(snap: Snapshot, reference: Snapshot | undefined): Issue[] {
+  if (!reference) return [];
+  return Object.entries(snap)
+    .filter(([id, e]) => e.kind === "research" && !reference[id] && e.data["key"] === undefined)
+    .map(([id]) => ({ id, status: "red" as const, rule: "K22", message: "a new research names no key — give it the key of the question it answers" }));
+}
+
 /** The memory as last committed: the reference when it has no owner approvals yet. */
 export const headSnapshot = (o: RepoOptions): Promise<Snapshot | undefined> => snapshotAt("HEAD", o);
 

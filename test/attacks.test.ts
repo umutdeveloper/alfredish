@@ -33,34 +33,57 @@ const FILES: Record<string, string> = {
 export const sOld = session({ id: "s.old", title: "Earlier session", at: "${OLD}", topic: "Earlier session", questions: ["What do we keep?"] });
 export const sToday = session({ id: "s.today", title: "Today's session", at: "${TODAY}", topic: "Today's session", questions: ["What changed?"] });
 `,
+  "memory/keys.ts": `import { key } from "./lang.ts";
+import { sOld } from "./sessions.ts";
+// Every non-fact definition names the question it answers (K22); each new key decided against the earlier ones (K23).
+export const kLaptop = key({ subject: "owner", name: "laptop", valueType: "text", describe: "the laptop of the owner", origin: sOld });
+export const kNotes = key({ subject: "notes", name: "repository", valueType: "text", describe: "where the notes repository lives", origin: sOld, distinctFrom: [kLaptop] });
+export const kBudget = key({ subject: "money", name: "monthlyCap", valueType: "text", describe: "the most spent in a month", origin: sOld, distinctFrom: [kLaptop, kNotes] });
+export const kInvest = key({ subject: "advice", name: "investmentAdvice", valueType: "text", describe: "whether investment advice is given", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget] });
+export const kPlain = key({ subject: "talk", name: "style", valueType: "text", describe: "how to talk to the owner", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest] });
+export const kFocus = key({ subject: "work", name: "yearFocus", valueType: "text", describe: "what the main focus is this year", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain] });
+export const kDispatch = key({ subject: "tickets", name: "workPlace", valueType: "text", describe: "where tickets are worked", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus] });
+export const kRenew = key({ subject: "domain", name: "renewal", valueType: "text", describe: "when the domain is renewed", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch] });
+// Questions the attacks below answer, decided against the others already.
+export const kX1 = key({ subject: "attack", name: "one", valueType: "text", describe: "first question an attack answers", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew] });
+export const kX2 = key({ subject: "attack", name: "two", valueType: "text", describe: "second question an attack answers", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1] });
+export const kX3 = key({ subject: "attack", name: "three", valueType: "text", describe: "third question an attack answers", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2] });
+export const kX4 = key({ subject: "attack", name: "four", valueType: "text", describe: "fourth question an attack answers", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3] });
+export const kX5 = key({ subject: "attack", name: "five", valueType: "text", describe: "fifth question an attack answers", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4] });
+export const kX6 = key({ subject: "attack", name: "six", valueType: "text", describe: "sixth question an attack answers", origin: sOld, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5] });
+`,
   "memory/infra.ts": `import { account, asset, cmd, file, url } from "./lang.ts";
 import { sOld } from "./sessions.ts";
-export const laptop = account({ id: "account.laptop", title: "The owner's laptop", origin: sOld, service: "macOS", owner: "owner", login: "owner", agentAccess: "none", verify: cmd("node runs", "node", ["--version"]), evidence: "live" });
-export const notes = asset({ id: "notes.repo", title: "Notes repository", origin: sOld, on: laptop, desired: "exists", location: url("https://example.com/notes"), verify: file("memory/index.ts").exists(), evidence: "live" });
+import { kLaptop, kNotes } from "./keys.ts";
+export const laptop = account({ key: kLaptop, id: "account.laptop", title: "The owner's laptop", origin: sOld, service: "macOS", owner: "owner", login: "owner", agentAccess: "none", verify: cmd("node runs", "node", ["--version"]), evidence: "live" });
+export const notes = asset({ key: kNotes, id: "notes.repo", title: "Notes repository", origin: sOld, on: laptop, desired: "exists", location: url("https://example.com/notes"), verify: file("memory/index.ts").exists(), evidence: "live" });
 `,
   "memory/rules.ts": `import { review, rule } from "./lang.ts";
 import { sOld } from "./sessions.ts";
+import { kBudget, kInvest, kPlain } from "./keys.ts";
 const ok = review({ by: "owner", at: "${OLD}", every: "365d" });
-export const budget = rule({ id: "rule.budget", title: "Budget cap", origin: sOld, appliesTo: "money", text: "Spend at most 1,000 EUR a month.", verify: ok, evidence: "human" });
-export const noInvestment = rule({ id: "rule.noInvestment", title: "No investment advice", origin: sOld, appliesTo: "advice", text: "Never give investment advice.", verify: ok, evidence: "human" });
-export const plain = rule({ id: "rule.plain", title: "Plain words", origin: sOld, appliesTo: "conversation", text: "Talk to the owner in plain, short sentences.", verify: ok, evidence: "human" });
+export const budget = rule({ key: kBudget, id: "rule.budget", title: "Budget cap", origin: sOld, appliesTo: "money", text: "Spend at most 1,000 EUR a month.", verify: ok, evidence: "human" });
+export const noInvestment = rule({ key: kInvest, id: "rule.noInvestment", title: "No investment advice", origin: sOld, appliesTo: "advice", text: "Never give investment advice.", verify: ok, evidence: "human" });
+export const plain = rule({ key: kPlain, id: "rule.plain", title: "Plain words", origin: sOld, appliesTo: "conversation", text: "Talk to the owner in plain, short sentences.", verify: ok, evidence: "human" });
 `,
   "memory/decisions.ts": `import { decision, fact, key, review } from "./lang.ts";
 import { sOld } from "./sessions.ts";
-export const titleKey = key({ subject: "work", name: "jobTitle", valueType: "text", describe: "official job title", origin: sOld });
+import { kBudget, kDispatch, kFocus, kInvest, kLaptop, kNotes, kPlain, kRenew, kX1, kX2, kX3, kX4, kX5, kX6 } from "./keys.ts";
+export const titleKey = key({ subject: "work", name: "jobTitle", valueType: "text", describe: "official job title", origin: sOld, distinctFrom: [kBudget, kDispatch, kFocus, kInvest, kLaptop, kNotes, kPlain, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] });
 export const jobTitle = fact({ id: "work.title", title: "Official job title", origin: sOld, value: "Senior Developer", key: titleKey, verify: review({ by: "owner", at: "${OLD}", every: "180d" }), evidence: "human" });
-export const focus = decision({ id: "work.focus", title: "Focus on the main job this year", origin: sOld, restsOn: [jobTitle], review: "30d", verify: review({ by: "owner", at: "${OLD}", every: "30d" }), evidence: "human" });
-export const dispatch = decision({ id: "work.dispatch", title: "Tickets are worked in the work folder", origin: sOld, restsOn: [], review: "365d", verify: review({ by: "owner", at: "${OLD}", every: "365d" }), evidence: "human" });
+export const focus = decision({ key: kFocus, id: "work.focus", title: "Focus on the main job this year", origin: sOld, restsOn: [jobTitle], review: "30d", verify: review({ by: "owner", at: "${OLD}", every: "30d" }), evidence: "human" });
+export const dispatch = decision({ key: kDispatch, id: "work.dispatch", title: "Tickets are worked in the work folder", origin: sOld, restsOn: [], review: "365d", verify: review({ by: "owner", at: "${OLD}", every: "365d" }), evidence: "human" });
 `,
   "memory/promises.ts": `import { confirm, promise } from "./lang.ts";
 import { sOld } from "./sessions.ts";
-export const renew = promise({ id: "promise.renewDomain", title: "Renew the domain", origin: sOld, owner: "owner", due: "${DUE}", requires: [], doneWhen: confirm({ by: "owner", what: "domain renewed" }), evidence: "human" });
+import { kRenew } from "./keys.ts";
+export const renew = promise({ key: kRenew, id: "promise.renewDomain", title: "Renew the domain", origin: sOld, owner: "owner", due: "${DUE}", requires: [], doneWhen: confirm({ by: "owner", what: "domain renewed" }), evidence: "human" });
 `,
   "memory/events.ts": `import { event } from "./lang.ts";
 import { sOld } from "./sessions.ts";
 export const started = event({ id: "event.started", title: "Memory started", origin: sOld, at: "${OLD}", text: "The memory was started." });
 `,
-  "memory/index.ts": ["sessions", "infra", "rules", "decisions", "promises", "events"].map((f) => `export * from "./${f}.ts";\n`).join(""),
+  "memory/index.ts": ["sessions", "keys", "infra", "rules", "decisions", "promises", "events"].map((f) => `export * from "./${f}.ts";\n`).join(""),
   "tsconfig.json": JSON.stringify({ compilerOptions: { target: "ES2024", module: "NodeNext", moduleResolution: "NodeNext", strict: true, exactOptionalPropertyTypes: true, allowImportingTsExtensions: true, noEmit: true, skipLibCheck: true, types: ["node"] }, include: ["memory"] }, null, 2),
   "package.json": JSON.stringify({ name: "attack-memory", private: true, type: "module" }),
   ".gitignore": "node_modules\n.alfredish-cache.json\n",
@@ -69,6 +92,7 @@ export const started = event({ id: "event.started", title: "Memory started", ori
 // The same header every definition file above starts with, for files an attack adds.
 const EXTRA_HEADER = `import { claim, cmd, decision, fact, key, local, review, asset, url } from "./lang.ts";
 import { sOld, sToday } from "./sessions.ts";
+import { kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6 } from "./keys.ts";
 import { laptop } from "./infra.ts";
 `;
 
@@ -258,7 +282,7 @@ describe.concurrent("attacks: mistakes the gate must refuse", () => {
   it("an owner-reviewed fact labelled 'live' behind a public claim is caught (K19)", async () => {
     const dir = await fresh();
     await addDefs(dir, `export const lie = fact({ id: "site.customers", key: key({ subject: "siteCustomers", name: "count", valueType: "number", describe: "number of happy customers", origin: sToday }), title: "Happy customers", origin: sToday, value: 100, verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "live" });
-export const lieClaim = claim({ id: "site.claim.customers", title: "Site: 100 happy customers", origin: sToday, text: "100 happy customers", where: url("https://example.com/"), restsOn: [lie], verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
+export const lieClaim = claim({ key: kX1, id: "site.claim.customers", title: "Site: 100 happy customers", origin: sToday, text: "100 happy customers", where: url("https://example.com/"), restsOn: [lie], verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toContain(`site.customers — K19: evidence "live" is more than a review can prove (at most "human")`);
@@ -281,8 +305,9 @@ export const lieClaim = claim({ id: "site.claim.customers", title: "Site: 100 ha
   it("a definition in a file the index does not export is caught (K18)", async () => {
     const dir = await fresh();
     await writeFile(join(dir, "memory/hidden.ts"), `import { cmd, fact, key } from "./lang.ts";
+import { kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6 } from "./keys.ts";
 import { sToday } from "./sessions.ts";
-export const hidden = fact({ id: "work.serverDown", key: key({ subject: "server", name: "status", valueType: "text", describe: "whether the server answers", origin: sToday }), title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });\n`);
+export const hidden = fact({ id: "work.serverDown", key: key({ subject: "server", name: "status", valueType: "text", describe: "whether the server answers", origin: sToday, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] }), title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toContain("work.serverDown — K18: defined in memory/hidden.ts but not reachable from the index");
@@ -290,14 +315,14 @@ export const hidden = fact({ id: "work.serverDown", key: key({ subject: "server"
 
   it("a new decision back-dated into a committed session is caught (K21); a session migrated in the same commit is accepted", async () => {
     const dir = await fresh();
-    await addDefs(dir, `export const backdated = decision({ id: "work.backdated", title: "We decided this long ago", origin: sOld, restsOn: [], review: "365d", verify: review({ by: "owner", at: "${OLD}", every: "365d" }), evidence: "human" });\n`);
+    await addDefs(dir, `export const backdated = decision({ key: kX1, id: "work.backdated", title: "We decided this long ago", origin: sOld, restsOn: [], review: "365d", verify: review({ by: "owner", at: "${OLD}", every: "365d" }), evidence: "human" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toContain("work.backdated — K21: new, but born in s.old");
     const fresh2 = await fresh();
     await addDefs(fresh2, `import { session } from "./lang.ts";
 export const sMigrated = session({ id: "s.migrated", title: "Old notes", at: "2026-01-05", topic: "Old notes", questions: ["What did we decide then?"] });
-export const migrated = decision({ id: "work.migrated", title: "An old decision, moved in", origin: sMigrated, restsOn: [], review: "3650d", verify: review({ by: "owner", at: "${TODAY}", every: "3650d" }), evidence: "human" });\n`);
+export const migrated = decision({ key: kX2, id: "work.migrated", title: "An old decision, moved in", origin: sMigrated, restsOn: [], review: "3650d", verify: review({ by: "owner", at: "${TODAY}", every: "3650d" }), evidence: "human" });\n`);
     expect((await gate(fresh2)).green).toBe(true);
   }, TIMEOUT);
 
@@ -313,13 +338,13 @@ export const title2 = fact({ id: "work.title2", title: "Job title", origin: sTod
   it("a second value under a renamed key is caught (K23); a real new property passes once decided", async () => {
     const dir = await fresh();
     await addDefs(dir, `import { titleKey } from "./decisions.ts";
-export const roleKey = key({ subject: "work", name: "officialRole", valueType: "text", describe: "official job title held", origin: sToday });
+export const roleKey = key({ subject: "work", name: "officialRole", valueType: "text", describe: "official job title held", origin: sToday, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] });
 export const title2 = fact({ id: "work.title2", title: "Job title", origin: sToday, value: "Principal Engineer", key: roleKey, verify: review({ by: "owner", at: "${TODAY}", every: "180d" }), evidence: "human" });
-export const usesTitle2 = decision({ id: "work.usesTitle2", title: "Uses the role", origin: sToday, restsOn: [title2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
+export const usesTitle2 = decision({ key: kX3, id: "work.usesTitle2", title: "Uses the role", origin: sToday, restsOn: [title2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toMatch(/key:work\.officialRole — K23: new key is close to: key:work\.jobTitle \(0\.\d\d\)/);
-    await edit(dir, "memory/extra.ts", `describe: "official job title held", origin: sToday });`, `describe: "official job title held", origin: sToday, distinctFrom: [titleKey] });`);
+    await edit(dir, "memory/extra.ts", `describe: "official job title held", origin: sToday, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] });`, `describe: "official job title held", origin: sToday, distinctFrom: [titleKey, kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] });`);
     const after = await gate(dir);
     expect(after.green, after.out).toBe(true);
   }, TIMEOUT);
@@ -335,9 +360,9 @@ export const usesTitle2 = decision({ id: "work.usesTitle2", title: "Uses the rol
   it("a contradicting second fact cannot hide: its new key is close to the existing one (K23)", async () => {
     const dir = await fresh();
     await addDefs(dir, `import { titleKey } from "./decisions.ts";
-export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday });
+export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] });
 export const jobTitle2 = fact({ id: "work.position", key: k2, title: "Official job title", origin: sToday, value: "Principal Engineer", verify: review({ by: "owner", at: "${TODAY}", every: "180d" }), evidence: "human" });
-export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
+export const rests = decision({ key: kX4, id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toMatch(/key:work\.position — K23: new key is close to: key:work\.jobTitle/);
@@ -346,7 +371,7 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
   it("a hand-made test that always passes is caught (K25)", async () => {
     const dir = await fresh();
     await addDefs(dir, `import { probe } from "./lang.ts";
-export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipeline is healthy", origin: sToday, restsOn: [], review: "30d", verify: probe("pipeline is green", async () => ({ ok: true })), evidence: "live" });\n`);
+export const fakeTest = decision({ key: kX5, id: "work.pipeline", title: "The deploy pipeline is healthy", origin: sToday, restsOn: [], review: "30d", verify: probe("pipeline is green", async () => ({ ok: true })), evidence: "live" });\n`);
     const r = await gate(dir);
     expect(r.green).toBe(false);
     expect(r.out).toMatch(/memory\/extra\.ts:\d+ — K25: imports probe — use page, http, header, file, git, domain, github, dns, all or cmd/);
@@ -367,7 +392,7 @@ export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipel
 
   it("HOLE (without owner approval): the agent marks a local path as confirmed by the owner", async () => {
     const dir = await fresh();
-    await addDefs(dir, `export const forged = asset({ id: "work.forged", title: "Some folder", origin: sToday, on: laptop, desired: "exists", location: local("/tmp/anything", { confirmedBy: "owner", at: "${TODAY}" }), verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
+    await addDefs(dir, `export const forged = asset({ key: kX6, id: "work.forged", title: "Some folder", origin: sToday, on: laptop, desired: "exists", location: local("/tmp/anything", { confirmedBy: "owner", at: "${TODAY}" }), verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
@@ -379,7 +404,7 @@ export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipel
 
   it("HOLE (without owner approval): a command that always passes (`true`) — visible in its description (K25), seen only by owner approval", async () => {
     const dir = await fresh();
-    await addDefs(dir, `export const fakeCmd = decision({ id: "work.backups", title: "Backups run every night", origin: sToday, restsOn: [], review: "30d", verify: cmd("a backup exists", "true", []), evidence: "live" });\n`);
+    await addDefs(dir, `export const fakeCmd = decision({ key: kX5, id: "work.backups", title: "Backups run every night", origin: sToday, restsOn: [], review: "30d", verify: cmd("a backup exists", "true", []), evidence: "live" });\n`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
@@ -398,9 +423,9 @@ export const fakeTest = decision({ id: "work.pipeline", title: "The deploy pipel
   it("HOLE (without owner approval): a contradicting second fact passes when the agent falsely declares its key distinct (only owner approval sees it)", async () => {
     const dir = await fresh();
     await addDefs(dir, `import { titleKey } from "./decisions.ts";
-export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday, distinctFrom: [titleKey] });
+export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday, distinctFrom: [titleKey, kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] });
 export const jobTitle2 = fact({ id: "work.position", key: k2, title: "Official job title", origin: sToday, value: "Principal Engineer", verify: review({ by: "owner", at: "${TODAY}", every: "180d" }), evidence: "human" });
-export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
+export const rests = decision({ key: kX4, id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: review({ by: "owner", at: "${TODAY}", every: "90d" }), evidence: "human" });\n`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
@@ -419,8 +444,8 @@ export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the titl
   it("HOLE (without owner approval): the memory's own copy of Alfredish is edited to hide red results", async () => {
     const dir = await fresh();
     await edit(dir, "vendor/alfredish/src/compiler.ts", "  issues.sort(", "  issues.length = 0;\n  issues.sort(");
-    await addDefs(dir, `export const down = fact({ id: "work.down", key: key({ subject: "server", name: "status", valueType: "text", describe: "whether the server answers", origin: sToday }), title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });
-export const rests = decision({ id: "work.restsOnDown", title: "Keep the server", origin: sToday, restsOn: [down], review: "30d", verify: review({ by: "owner", at: "${TODAY}", every: "30d" }), evidence: "human" });\n`);
+    await addDefs(dir, `export const down = fact({ id: "work.down", key: key({ subject: "server", name: "status", valueType: "text", describe: "whether the server answers", origin: sToday, distinctFrom: [kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] }), title: "The server is down", origin: sToday, value: "down", verify: cmd("server answers", "false", []), evidence: "live" });
+export const rests = decision({ key: kX4, id: "work.restsOnDown", title: "Keep the server", origin: sToday, restsOn: [down], review: "30d", verify: review({ by: "owner", at: "${TODAY}", every: "30d" }), evidence: "human" });\n`);
     stillOpen(await gate(dir));
   }, TIMEOUT);
 
@@ -477,7 +502,7 @@ describe.concurrent("attacks against a memory with owner approval (K26-K28)", ()
 
   it("a local path the agent marks as owner-confirmed is red until the owner signs it (K26)", async () => {
     const dir = await freshApproved();
-    await addDefs(dir, `export const forged = asset({ id: "work.forged", title: "Some folder", origin: sToday, on: laptop, desired: "exists", location: local("/tmp/anything", { confirmedBy: "owner", at: "${TODAY}" }), verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
+    await addDefs(dir, `export const forged = asset({ key: kX6, id: "work.forged", title: "Some folder", origin: sToday, on: laptop, desired: "exists", location: local("/tmp/anything", { confirmedBy: "owner", at: "${TODAY}" }), verify: cmd("node runs", "node", ["--version"]), evidence: "live" });\n`);
     await because(dir, { "work.forged": "a folder" });
     expect((await gate(dir)).out).toContain("work.forged — K26: a local() path the owner has not signed");
   }, TIMEOUT);
@@ -485,9 +510,9 @@ describe.concurrent("attacks against a memory with owner approval (K26-K28)", ()
   it("a false distinctFrom and a `true` test are unapproved: the owner sees both before they count", async () => {
     const dir = await freshApproved();
     await addDefs(dir, `import { titleKey } from "./decisions.ts";
-export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday, distinctFrom: [titleKey] });
+export const k2 = key({ subject: "work", name: "position", valueType: "text", describe: "official job title on paper", origin: sToday, distinctFrom: [titleKey, kLaptop, kNotes, kBudget, kInvest, kPlain, kFocus, kDispatch, kRenew, kX1, kX2, kX3, kX4, kX5, kX6] });
 export const jobTitle2 = fact({ id: "work.position", key: k2, title: "Official job title", origin: sToday, value: "Principal Engineer", verify: cmd("always", "true", []), evidence: "live" });
-export const rests = decision({ id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: cmd("always", "true", []), evidence: "live" });\n`);
+export const rests = decision({ key: kX4, id: "work.restsOnBoth", title: "Plan on the title", origin: sToday, restsOn: [jobTitle2], review: "90d", verify: cmd("always", "true", []), evidence: "live" });\n`);
     await because(dir, { "key:work.position": "a new property", "work.position": "new title", "work.restsOnBoth": "plan" });
     const r = await gate(dir);
     expect(r.green).toBe(false);
