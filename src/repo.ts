@@ -12,8 +12,8 @@ import { diffSnapshots, snapshot, type DiffLine, type Snapshot } from "./snapsho
 import { bodyHash, parseGenerated, render, type View } from "./views.ts";
 import { typeEscapes } from "./escapes.ts";
 import { looksLikeDef } from "./validate.ts";
-import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank, type Embed } from "./similarity.ts";
-import type { Def, ISODate, KeyDef, ProbeCache, ProbeContext } from "./types.ts";
+import { cosine, embedder, EVENT_SIMILARITY_THRESHOLD, eventText, KEY_SIMILARITY_THRESHOLD, keyText, rank, type Embed } from "./similarity.ts";
+import type { Def, EventDef, ISODate, KeyDef, ProbeCache, ProbeContext } from "./types.ts";
 
 const run = promisify(execFile);
 const PAST = new Set(["session", "event", "research"]);
@@ -151,6 +151,37 @@ export async function checkNewKeys(defs: readonly Def[], o: RepoOptions, embed: 
       const list = open.map((r) => `${r.key.id} (${r.score.toFixed(2)})`).join(", ");
       issues.push({ id: k.id, status: "red", rule: "K23", message: `new key is close to: ${list} — use one of them, or add them to distinctFrom` });
     }
+  }
+  return issues;
+}
+
+/**
+ * K29: an event new since the last commit must decide every event of the memory that is at least
+ * EVENT_SIMILARITY_THRESHOLD similar: list it in distinctFrom (another happening), or name it in corrects (this one says
+ * it was wrong). A retelling of a happening already recorded is not added at all. Model unusable → red, never unseen.
+ */
+export async function checkNewEvents(defs: readonly Def[], o: RepoOptions, embed: () => Promise<Embed> = embedder, reference?: Snapshot): Promise<Issue[]> {
+  const head = reference ?? (await snapshotAt("HEAD", o)) ?? {}; // K28
+  const events = defs.filter((d): d is EventDef => d.kind === "event");
+  const fresh = events.filter((e) => !head[e.id]);
+  if (!fresh.length) return [];
+  let e: Embed;
+  try {
+    e = await embed();
+  } catch (err) {
+    return fresh.map((x) => ({ id: x.id, status: "red", rule: "K29", message: `cannot compare events: ${(err as Error).message}` }));
+  }
+  const issues: Issue[] = [];
+  for (const x of fresh) {
+    const v = await e(eventText(x));
+    const decided = (other: EventDef) => (x.distinctFrom ?? []).includes(other) || x.corrects === other || (other.distinctFrom ?? []).includes(x) || other.corrects === x;
+    const open: string[] = [];
+    for (const other of events) {
+      if (other === x || decided(other)) continue;
+      const s = cosine(v, await e(eventText(other)));
+      if (s >= EVENT_SIMILARITY_THRESHOLD) open.push(`${other.id} (${s.toFixed(2)})`);
+    }
+    if (open.length) issues.push({ id: x.id, status: "red", rule: "K29", message: `new event is close to: ${open.join(", ")} — if it tells the same happening, do not add it (or write it as a correction with corrects); otherwise add them to distinctFrom` });
   }
   return issues;
 }

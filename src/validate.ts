@@ -84,6 +84,8 @@ export function shapeProblems(x: unknown): string[] {
       str("text");
       out.push(...linkList(d["affects"], "affects", true, true));
       if (d["retires"] !== undefined && !(Array.isArray(d["retires"]) && d["retires"].every(isStr))) out.push("retires must be a list of definition ids");
+      if (d["distinctFrom"] !== undefined && !(Array.isArray(d["distinctFrom"]) && d["distinctFrom"].every((x) => isDefOf(x, new Set(["event"]))))) out.push("distinctFrom must be a list of events");
+      if (d["corrects"] !== undefined && !isDefOf(d["corrects"], new Set(["event"]))) out.push("corrects must be an event");
       break;
     case "research": {
       if (!isDate(d["at"])) out.push(`at — ${FIX.date}`);

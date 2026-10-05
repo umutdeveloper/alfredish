@@ -161,6 +161,10 @@ export interface EventDef {
   affects: readonly (Def | RetiredRef)[];
   /** Ids of present-tense definitions removed on this event's day (K20). */
   retires?: readonly string[];
+  /** K29: close events (by meaning) it was compared with and that tell another happening. */
+  distinctFrom?: readonly EventDef[];
+  /** K29: the earlier event that told this happening wrongly; this one corrects it. */
+  corrects?: EventDef;
 }
 
 // ---- present-tense types ----

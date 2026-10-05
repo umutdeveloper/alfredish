@@ -10,6 +10,9 @@ export const MODEL_SHA256 = "d4e388894e09cf3816e8b0896d81d265b55e7a9fff9ab03fe8b
 /** K23: candidates at or above this must be decided in distinctFrom (measured; see SPEC K23). */
 export const KEY_SIMILARITY_THRESHOLD = 0.7;
 
+/** K29: events at or above this must be decided (measured on retold and conflicting events; see SPEC K29). */
+export const EVENT_SIMILARITY_THRESHOLD = 0.78;
+
 export type Embed = (text: string) => Promise<number[]>;
 
 async function sha256(path: string): Promise<string> {
@@ -48,6 +51,7 @@ export function embedder(): Promise<Embed> {
 }
 
 export const keyText = (k: Pick<KeyDef, "name" | "describe">) => `clustering: ${k.name} — ${k.describe}`;
+export const eventText = (e: { title: string; text: string }) => `clustering: ${e.title}. ${e.text}`;
 
 export function cosine(a: readonly number[], b: readonly number[]): number {
   let d = 0, x = 0, y = 0;

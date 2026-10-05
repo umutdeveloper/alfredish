@@ -89,7 +89,7 @@ it does not add a second one.
 | Type | What | Required fields | Rule |
 |---|---|---|---|
 | `session` | A working session | `at`, `topic`, `questions` | The session note and log line are generated from it and from the definitions born in it |
-| `event` | Something that happened | `at`, `text`; optional `affects`, `retires` (ids of present-tense definitions removed that day, K20) | Immutable once its day has passed |
+| `event` | Something that happened | `at`, `text`; optional `affects`, `distinctFrom` / `corrects` (K29), `retires` (ids of present-tense definitions removed that day, K20) | Immutable once its day has passed |
 | `research` | A piece of research | `at`, `question`, `findings`, `readWhen`; optional `rawData` | Its readable page is generated from the findings. Immutable once its day has passed |
 
 **Finding:** one result of a research. `text`, optional `value`, optional `source` (URL or a place in `rawData`).
@@ -189,9 +189,19 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   counts as not given at all: a renewal the agent wrote itself cannot lift red.
 - **K27 — Approval records are checked:** every record's signature is valid for a key on the owner's anchor list, and the
   records form an unbroken chain. A bad signature, an unknown key or a broken chain is red.
-- **K28 — The signed state is the reference:** K5, K20, K21 and K23 compare with the last signed record, not `HEAD`
+- **K28 — The signed state is the reference:** K5, K20, K21, K23 and K29 compare with the last signed record, not `HEAD`
   (`HEAD` only until a first record exists), so a commit made past the hook cannot move the reference. The hash of the
   memory's `vendor/alfredish` copy is part of every record: a changed copy is red until the owner approves it.
+- **K29 — A new event must be compared with every event:** for an event that is not in the last commit (or signed
+  record), every event of the memory is ranked by meaning similarity (§9.1, text "<title>. <text>"). Every one at or
+  above **0.78** must be decided: listed in the new event's `distinctFrom` (another happening) or named in `corrects`
+  (the new event says the old one was wrong). A retelling of a happening already recorded is not added at all. Red
+  otherwise, naming the candidates with their scores; red when the model cannot be used. Events are checked by nothing
+  else (they record the past, which K5 freezes), so a second, differing account is caught here or never. 0.78 is
+  measured: 24 written retellings or conflicting accounts scored 0.90 or more against the event they retold (ranked
+  first every time); in a real memory of 103 events, a scan of all 841 pairs at 0.75 found 7 real repeats, conflicts or
+  corrections, all between 0.816 and 0.903 — none below 0.80, so 0.78 keeps a margin. About 7 candidates per new event
+  (at 0.70 half of all events were candidates).
 
 ## 8. Statuses
 

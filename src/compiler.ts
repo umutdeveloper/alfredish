@@ -97,7 +97,7 @@ function children(d: Def): Def[] {
   if (d.kind === "idea") out.push(...verifyDeps(d.verify), ...(d.basedOn ?? []));
   if (d.kind === "promise" && typeof d.due !== "string") out.push(...verifyDeps(d.due));
   if (d.kind === "decision" && d.supersedes) out.push(d.supersedes);
-  if (d.kind === "event") out.push(...d.affects.filter(isDef));
+  if (d.kind === "event") out.push(...d.affects.filter(isDef), ...(d.distinctFrom ?? []), ...(d.corrects ? [d.corrects] : []));
   if (d.kind === "key") out.push(...(d.distinctFrom ?? []));
   if (d.kind === "fact" && d.key) out.push(d.key);
   if (d.kind === "fact" && d.parked) out.push(...verifyDeps(d.parked.revisitWhen));

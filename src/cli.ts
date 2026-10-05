@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkHistory, checkImports, checkNewKeys, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkHistory, checkImports, checkNewEvents, checkNewKeys, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
 import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
@@ -98,6 +98,7 @@ async function main(argv: string[]): Promise<number> {
         ...(await checkHistory(snap, day, repo, reference)),
         ...(await checkReachable(memoryDirAbs, new Set<unknown>([...defs, ...invalid.keys()]), base)),
         ...(await checkNewKeys(defs, repo, undefined, reference)),
+        ...(await checkNewEvents(defs, repo, undefined, reference)),
       );
       console.log(formatCheck(report));
       // Steers any agent, whether or not it read AGENTS.md: approval is the owner's step, never the agent's.
