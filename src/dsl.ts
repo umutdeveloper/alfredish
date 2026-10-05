@@ -260,11 +260,95 @@ export const domain = (name: string) => ({
   },
 });
 
+/** `gh api -i` output: the HTTP status and the (jq-filtered) body; undefined when gh gave no HTTP answer. */
+function ghAnswer(stdout: string): { status: number; body: string } | undefined {
+  const m = /^HTTP\/[\d.]+ (\d{3})/.exec(stdout);
+  if (!m) return undefined;
+  const gap = stdout.search(/\r?\n\r?\n/);
+  return { status: Number(m[1]), body: gap < 0 ? "" : stdout.slice(gap).trim() };
+}
+const ghCall = async (ctx: ProbeContext, path: string, jq: string) => ghAnswer((await ctx.run("gh", ["api", "-i", path, "--jq", jq])).stdout);
+
+/** A GitHub repository, through the owner's gh login (so private repositories count). Unknown is never green. */
+export const github = (repo: string) => ({
+  exists: () =>
+    probe(`github ${repo} exists`, async (ctx) => {
+      const a = await ghCall(ctx, `repos/${repo}`, ".full_name");
+      if (!a) return { ok: false, detail: "no answer from GitHub (gh)" };
+      if (a.status === 404) return { ok: false, detail: "not found" };
+      if (a.status !== 200) return { ok: false, detail: `GitHub answered ${a.status}` };
+      return a.body.toLowerCase() === repo.toLowerCase() ? { ok: true } : { ok: false, detail: `answered as ${a.body || "?"} (renamed or moved)` };
+    }),
+  absent: () =>
+    probe(`github ${repo} is absent`, async (ctx) => {
+      const a = await ghCall(ctx, `repos/${repo}`, ".full_name");
+      if (!a) return { ok: false, detail: "no answer from GitHub (gh): absence unknown" };
+      if (a.status === 404) return { ok: true };
+      return a.status === 200 ? { ok: false, detail: `still exists (${a.body || repo})` } : { ok: false, detail: `GitHub answered ${a.status}: absence unknown` };
+    }),
+  lastCommitTouching: (path: string, sha: string) =>
+    probe(`github ${repo} last commit touching ${path} is ${sha}`, async (ctx) => {
+      const a = await ghCall(ctx, `repos/${repo}/commits?path=${encodeURIComponent(path)}&per_page=1`, ".[0].sha");
+      if (!a || a.status !== 200) return { ok: false, detail: a ? `GitHub answered ${a.status}` : "no answer from GitHub (gh)" };
+      return a.body.startsWith(sha) ? { ok: true } : { ok: false, detail: `last is ${a.body.slice(0, 7) || "none"}` };
+    }),
+});
+
+export type DnsType = "A" | "AAAA" | "CNAME" | "MX" | "NS" | "TXT";
+
+/** DNS answers for `name` (optionally from one name server), with the query's status, or why there is none. */
+async function dnsAnswer(ctx: ProbeContext, name: string, type: DnsType, server?: string): Promise<{ status: string; data: string[] } | { why: string }> {
+  const r = await ctx.run("dig", ["+noall", "+comments", "+answer", ...(server ? [`@${server}`] : []), type, name]);
+  if (r.code !== 0) return { why: `dig failed (exit ${r.code})` };
+  const status = /status: ([A-Z]+)/.exec(r.stdout)?.[1];
+  if (!status) return { why: "no DNS answer" };
+  const data = r.stdout.split("\n").map((l) => l.trim().split(/\s+/)).filter((f) => f.length >= 5 && f[2] === "IN" && f[3] === type).map((f) => f.slice(4).join(" ").toLowerCase());
+  return { status, data };
+}
+
+/** A DNS record set. A value matches when a record contains it (case-insensitive). Unknown is never green. */
+export const dns = (name: string, type: DnsType, o: { server?: string } = {}) => {
+  const at = o.server ? ` at ${o.server}` : "";
+  return {
+    contains: (value: string) =>
+      probe(`dns ${type} ${name}${at} contains "${value}"`, async (ctx) => {
+        const a = await dnsAnswer(ctx, name, type, o.server);
+        if ("why" in a) return { ok: false, detail: a.why };
+        if (a.status !== "NOERROR") return { ok: false, detail: a.status };
+        return a.data.some((d) => d.includes(value.toLowerCase())) ? { ok: true } : { ok: false, detail: a.data.length ? a.data.join(", ").slice(0, 80) : "no records" };
+      }),
+    lacks: (...values: string[]) =>
+      probe(`dns ${type} ${name}${at} lacks ${values.map((v) => `"${v}"`).join(", ")}`, async (ctx) => {
+        const a = await dnsAnswer(ctx, name, type, o.server);
+        if ("why" in a) return { ok: false, detail: `${a.why}: absence unknown` };
+        if (a.status !== "NOERROR" && a.status !== "NXDOMAIN") return { ok: false, detail: `${a.status}: absence unknown` };
+        const hit = a.data.find((d) => values.some((v) => d.includes(v.toLowerCase())));
+        return hit ? { ok: false, detail: `found ${hit.slice(0, 80)}` } : { ok: true };
+      }),
+  };
+};
+
+/** Several built-in tests that must all pass; its description lists every one (K25). */
+export const all = (...tests: ProbeVerify[]) =>
+  probe(`all of: ${tests.map((t) => t.describe).join("; ")}`, async (ctx) => {
+    for (const t of tests) {
+      const r = await t.run(ctx);
+      if (!r.ok) return { ok: false, detail: `${t.describe}: ${r.detail ?? "failed"}` };
+    }
+    return { ok: true };
+  });
+
 export const git = (repo: string) => ({
   clean: () =>
     probe(`git ${repo} is clean`, async (ctx) => {
       const r = await ctx.run("git", ["status", "--porcelain"], repo);
       return r.code === 0 && r.stdout.trim() === "" ? { ok: true } : { ok: false, detail: "uncommitted changes" };
+    }),
+  noRemote: () =>
+    probe(`git ${repo} has no remote`, async (ctx) => {
+      const r = await ctx.run("git", ["remote"], repo);
+      if (r.code !== 0) return { ok: false, detail: "not a git repository" };
+      return r.stdout.trim() === "" ? { ok: true } : { ok: false, detail: `remotes: ${r.stdout.trim().split("\n").join(", ")}` };
     }),
   lastCommitMatches: (re: RegExp, describe: string) =>
     probe(`git ${repo} last commit ${describe} (matches ${re})`, async (ctx) => {

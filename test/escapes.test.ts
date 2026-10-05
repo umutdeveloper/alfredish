@@ -64,7 +64,7 @@ describe("K25 — a test says everything it does", () => {
       "const t = probe(\"x\", async () => ({ ok: true }));",
       'const note = "we never call probe here";',
     ].join("\n");
-    expect(whats(src)).toEqual(["1:imports probe (K25: use page, http, header, file, git, domain or cmd)", "2:calls probe (K25: use page, http, header, file, git, domain or cmd)"]);
+    expect(whats(src)).toEqual(["1:imports probe (K25: use page, http, header, file, git, domain, github, dns, all or cmd)", "2:calls probe (K25: use page, http, header, file, git, domain, github, dns, all or cmd)"]);
   });
 
   it("cmd and git describe everything they run and expect, so the hash covers it", async () => {

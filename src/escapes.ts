@@ -31,10 +31,10 @@ export function typeEscapes(src: string, fileName = "memory.ts"): Escape[] {
     }
     // K25: probes are built only with Alfredish's builders; importing or calling `probe` itself is a hand-made test.
     if (ts.isImportSpecifier(node) && (node.propertyName ?? node.name).text === "probe") {
-      out.push({ line: lineOf(node.getStart(sf)), what: "imports probe (K25: use page, http, header, file, git, domain or cmd)" });
+      out.push({ line: lineOf(node.getStart(sf)), what: "imports probe (K25: use page, http, header, file, git, domain, github, dns, all or cmd)" });
     }
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "probe") {
-      out.push({ line: lineOf(node.getStart(sf)), what: "calls probe (K25: use page, http, header, file, git, domain or cmd)" });
+      out.push({ line: lineOf(node.getStart(sf)), what: "calls probe (K25: use page, http, header, file, git, domain, github, dns, all or cmd)" });
     }
     if (node.kind === ts.SyntaxKind.UnknownKeyword && ts.isAsExpression(node.parent)) {
       out.push({ line: lineOf(node.getStart(sf)), what: "as unknown" });
