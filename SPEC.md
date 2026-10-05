@@ -158,7 +158,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   unless an `event` dated today lists its id in `retires` (its `text` says why). Compared with `HEAD`; once owner
   approval exists, with the last signed record. A past event that `affects` a retired definition names it with
   `retired("<id>")` (in `affects` or `distinctFrom`), which is recorded exactly like the live reference was, so the past is unchanged (K5); red if the id
-  still exists or no event retires or drops it (K32). A definition (of any kind, past ones too, K5) may also leave because it **moved** into another
+  still exists or no event retires, drops (K32) or moves (§9.4) it. A definition (of any kind, past ones too, K5) may also leave because it **moved** into another
   memory: an event dated today lists it in `moves: { memory, ids }`, and that memory's owner-signed state holds it
   (read as in §9.2); until the owner approves it there, it may not leave. Keys are covered like other present-tense
   definitions.
@@ -330,9 +330,25 @@ its own memory in the repository of memories (§9.3). To move a project `<name>`
    `moves: { memory: "<name>", ids: [...] }` listing every moved id (shared sessions stay); a reason per moved id in the
    session; definitions of the home memory that rested on moved ones link to them now. `alfred build` removes their
    pages. The check lets each moved id go only if the new memory's signed state holds it (K5, K20).
+   A past event of the home memory that named a moved one (in `affects` or `distinctFrom`) names it with
+   `retired("<id>")` from then on: the past stays as it was, and the move event is what lets the name stand.
 9. **The owner signs the home memory** (the moved removals come as one step).
 10. **Commit** each repository once (ASCII subject, `YYYY-MM-DD: <topic>`); push the repository of memories only with the
     owner's go.
+
+What moving Ada (2026-10-05, 176 definitions) taught:
+
+- **Links come after signatures.** `alfred link` pins only what the owner signed in the home memory: a rule written in
+  the home memory for the move (e.g. a new owner rule the project should link) is signed there before it is linked.
+- **The new memory decides every event and key again** (K29, K23): nothing is in its signed state yet. Ada's 74
+  events gave 271 close pairs. Judge them with strong models in batches, known repeats hidden in every batch and a
+  specific reason per pair; redo a batch that misses one. Write each pair once, on the event that is evaluated later
+  (a file that imports the other, or later in the same file), so no import cycle appears.
+- **A real repeat found there is signed as it is first**, then dropped inside the new memory with K32 in a second round:
+  a drop needs the event in that memory's signed state. Sign the home memory's removals before the drop, or the home
+  memory loses sight of the moved id.
+- **Shared sessions are copied without their `changes`**; the new memory's own session of the move carries its reasons.
+- **The repository's shared Alfredish copy is approved once**, in any one of its memories.
 
 ## 10. Agent rules (for every agent using Alfredish)
 

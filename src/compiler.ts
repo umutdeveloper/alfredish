@@ -442,8 +442,9 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     }
   }
 
-  // K20: a past event may name a retired definition only if it is gone and some event retired it (or dropped it, K32).
-  const retiredIds = new Set(defs.flatMap((d) => (d.kind === "event" ? [...(d.retires ?? []), ...(d.drops ?? []).map((x) => x.id)] : [])));
+  // K20: a past event may name a retired definition only if it is gone and some event retired it, dropped it (K32) or
+  // moved it into another memory (§9.4).
+  const retiredIds = new Set(defs.flatMap((d) => (d.kind === "event" ? [...(d.retires ?? []), ...(d.drops ?? []).map((x) => x.id), ...(d.moves?.ids ?? [])] : [])));
   const liveIds = new Set(defs.map((d) => d.id));
   for (const d of defs) {
     if (d.kind !== "event") continue;

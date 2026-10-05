@@ -28,4 +28,14 @@ describe("K20 — a past event names a retired definition with retired(id), and 
     expect(await k20([past([retired("d.old")]), kept])).toEqual([expect.objectContaining({ id: "e.past", message: expect.stringContaining('retired("d.old") but no event retires it') })]);
     expect(await k20([past([retired("d.old")]), old, merged])).toEqual([expect.objectContaining({ id: "e.past", message: expect.stringContaining('retired("d.old") but d.old still exists') })]);
   });
+
+  it("names a definition that moved into another memory, so a past event that named it stays as it was (§9.4)", async () => {
+    const otherEvent = event({ id: "e.golive.launch", title: "Launch", origin: s1, at: "2026-10-01", text: "The site went live." });
+    const before = snapshot(collect([event({ id: "e.past", title: "Past", origin: s1, at: "2026-10-01", text: "It happened.", affects: [], distinctFrom: [otherEvent] })]).defs)["e.past"];
+    const named = event({ id: "e.past", title: "Past", origin: s1, at: "2026-10-01", text: "It happened.", affects: [], distinctFrom: [retired(otherEvent.id)] });
+    const moved = event({ id: "e.moved", title: "GoLive moved", origin: s2, at: today, text: "GoLive moved into its own memory.", moves: { memory: "golive", ids: [otherEvent.id] } });
+    expect(snapshot(collect([named, moved]).defs)["e.past"]).toEqual(before);
+    expect(await k20([named, moved])).toEqual([]);
+    expect(await k20([named])).toEqual([expect.objectContaining({ id: "e.past", message: expect.stringContaining(`retired("${otherEvent.id}") but no event retires it`) })]);
+  });
 });
