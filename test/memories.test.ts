@@ -25,7 +25,7 @@ async function sh(cwd: string, cmd: string, args: string[]): Promise<{ code: num
 const memory = (name: string): Record<string, string> => ({
   [`${name}/memory/lang.ts`]: `export * from "../../vendor/alfredish/src/index.ts";\n`,
   [`${name}/memory/sessions.ts`]: `import { session } from "./lang.ts";\nexport const s1 = session({ id: "s.${name}", title: "Start", at: "${day}", topic: "Start", questions: ["What is ${name}?"] });\n`,
-  [`${name}/memory/rules.ts`]: `import { review, rule } from "./lang.ts";\nimport { s1 } from "./sessions.ts";\nexport const r1 = rule({ id: "rule.${name}.scope", title: "Scope", origin: s1, appliesTo: "${name}", text: "Only ${name} lives here.", verify: review({ by: "owner", at: "${day}", every: "365d" }), evidence: "human" });\n`,
+  [`${name}/memory/rules.ts`]: `import { review, rule } from "./lang.ts";\nimport { s1 } from "./sessions.ts";\nexport const r1 = rule({ id: "rule.${name}.scope", title: "Scope", origin: s1, appliesTo: "${name}", text: "Only ${name} lives here.", verify: review({ by: "owner", at: "${day}", every: "365d" }), evidence: "human" });\nexport const r2 = rule({ id: "rule.${name}.plain", title: "Plain words", origin: s1, appliesTo: "conversation", text: "Talk plainly.", verify: review({ by: "owner", at: "${day}", every: "365d" }), evidence: "human" });\n`,
   [`${name}/memory/index.ts`]: `export * from "./sessions.ts";\nexport * from "./rules.ts";\n`,
   [`${name}/tsconfig.json`]: JSON.stringify({ compilerOptions: { target: "ES2024", module: "NodeNext", moduleResolution: "NodeNext", strict: true, allowImportingTsExtensions: true, noEmit: true, skipLibCheck: true, types: ["node"] }, include: ["memory"] }),
 });
@@ -88,4 +88,15 @@ describe("a repository of memories sharing one Alfredish copy", () => {
     await git("reset", "-q", "--hard");
     await git("clean", "-qfd", "-e", "node_modules", "-e", "vendor");
   }, TIMEOUT);
+
+  it("a memory without the owner's conversation rules is red (K31): its agent would work without them", async () => {
+    const rules = join(root, "ada/memory/rules.ts");
+    const before = await readFile(rules, "utf8");
+    await writeFile(rules, before.replace(/export const r2 = .*\n/, ""));
+    const r = await check("ada");
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("AGENTS.md — K31: no rule tells an agent here how to talk to the owner");
+    await writeFile(rules, before);
+  }, TIMEOUT);
 });
+

@@ -43,6 +43,7 @@ import { sOld } from "./sessions.ts";
 const ok = review({ by: "owner", at: "${OLD}", every: "365d" });
 export const budget = rule({ id: "rule.budget", title: "Budget cap", origin: sOld, appliesTo: "money", text: "Spend at most 1,000 EUR a month.", verify: ok, evidence: "human" });
 export const noInvestment = rule({ id: "rule.noInvestment", title: "No investment advice", origin: sOld, appliesTo: "advice", text: "Never give investment advice.", verify: ok, evidence: "human" });
+export const plain = rule({ id: "rule.plain", title: "Plain words", origin: sOld, appliesTo: "conversation", text: "Talk to the owner in plain, short sentences.", verify: ok, evidence: "human" });
 `,
   "memory/decisions.ts": `import { decision, fact, key, review } from "./lang.ts";
 import { sOld } from "./sessions.ts";

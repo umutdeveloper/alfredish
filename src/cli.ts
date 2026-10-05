@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkHistory, linkedRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkHistory, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
 import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals, vendorDir } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
@@ -109,13 +109,15 @@ done
       // §14: the owner's signed approvals, if this memory has them (K27), are the reference (K28) and mark what is
       // unapproved (K26).
       const approvals = await loadApprovals(base, process.env["ALFREDISH_ANCHOR"] ?? DEFAULT_ANCHOR);
+      const linked = await linkedRules(defs, ctx);
       const signed = approvals.state;
       const reference = signed && signed.records > 0 ? referenceSnapshot(signed) : undefined;
       report.issues.push(
         ...approvals.issues,
         ...(signed ? checkApproval(snap, defs, signed) : []),
         ...(signed ? await checkAlfredishCopy(base, signed) : []),
-        ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined, linkedRules: await linkedRules(defs, ctx) }), snap, repo)),
+        ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined, linkedRules: linked }), snap, repo)),
+        ...ownerRules(defs, linked),
         ...(await checkPast(snap, day, repo, reference)),
         ...(await checkImports(repo)),
         ...(await checkTypeEscapes(repo)),

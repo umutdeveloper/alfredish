@@ -383,3 +383,13 @@ export async function linkedRules(defs: readonly Def[], ctx: ProbeContext): Prom
   return out;
 }
 
+/**
+ * K31: an agent working in a memory must find the owner's rules on how to talk to them — rules of the memory itself or
+ * linked from another memory (§9.4) with appliesTo "conversation". A memory split off without them would let its agent
+ * work silently without them.
+ */
+export function ownerRules(defs: readonly Def[], linked: readonly LinkedRule[]): Issue[] {
+  const own = defs.some((d) => d.kind === "rule" && d.appliesTo === "conversation");
+  if (own || linked.some((r) => r.appliesTo === "conversation")) return [];
+  return [{ id: "AGENTS.md", status: "red", rule: "K31", message: 'no rule tells an agent here how to talk to the owner — link the owner\'s conversation rules from their memory (§9.4) or write rules with appliesTo: "conversation"' }];
+}

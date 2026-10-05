@@ -205,6 +205,9 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   first every time); in a real memory of 103 events, a scan of all 841 pairs at 0.75 found 7 real repeats, conflicts or
   corrections, all between 0.816 and 0.903 — none below 0.80, so 0.78 keeps a margin. About 7 candidates per new event
   (at 0.70 half of all events were candidates).
+- **K31 — The owner's rules reach every memory:** a memory must hold a rule with `appliesTo: "conversation"`, its own or
+  linked from the owner's home memory (§9.4); otherwise red — an agent working there would not know how to talk to the
+  owner.
 - **K30 — No machine path in a memory's text:** every text of every definition is scanned for a path that belongs to one
   machine (`~/…`, `$HOME/…`, `./…`, `../…`, `C:\…`, `%VAR%\…`, `/Users/…` and other system roots). A path the owner
   confirmed with `local()` may appear only in a test's description (`verify`, `due`); anywhere else, and any other
@@ -288,6 +291,35 @@ Where the memories are is the machine's, not a memory's (K15): `~/.alfredish/mem
 (overridable with `ALFREDISH_MEMORIES`). A link nothing rests on is red (K12), except a link to a rule: a project memory links
 the owner's own rules (how to talk, how to keep memory), and AGENTS.md lists each with where it comes from, in the
 wording signed at the pinned hash — while the link is yellow, the earlier wording stays until it is re-linked.
+### 9.4 Moving a project into its own memory
+
+The owner's **home memory** (e.g. Alfred) keeps the owner's personal knowledge and the owner's rules; each project gets
+its own memory in the repository of memories (§9.3). To move a project `<name>` out of the home memory, in this order:
+
+1. **Skeleton.** `<repo>/<name>/memory/lang.ts` exporting `../../vendor/alfredish/src/index.ts`; `<repo>/<name>/tsconfig.json`
+   (the home memory's options, `include: ["memory"]`); `<repo>/<name>/package.json` with `type: module` and scripts
+   `check` (`../node_modules/.bin/tsc -p tsconfig.json && node ../vendor/alfredish/src/cli.ts check`), `quick`, `build`,
+   `alfred`; `<repo>/<name>/CLAUDE.md` containing `@AGENTS.md`.
+2. **Definitions.** Copy the project's files into `memory/`, imports rewritten to `./lang.ts` and `./sessions.ts`. Copy
+   the sessions its definitions were born in — a session shared with what stays is copied, not moved — and add a session
+   of today for the move. `memory/index.ts` exports every file.
+3. **Links, never copies.** Every reference to a definition that stays in the home memory (an account in `on:`, a fact or
+   decision in `restsOn`) becomes a link; `alfred link <home> <id>` prints it (§9.2).
+4. **Rules.** The project's own rules (`appliesTo` the project: its budget, tone, roles) move with it. The owner's rules
+   (`conversation`, `advice`, `memory`, `git`) are linked, not copied — without a conversation rule the memory is red
+   (K31). Write the memory's own identity rule.
+5. **Register** the memory: `"<name>": "<folder>"` in `~/.alfredish/memories.json`.
+6. **Check** from `<repo>/<name>`: `npm run build`, `npm run check`. In a new memory every key and event is new: decide
+   each K23/K29 candidate (`distinctFrom`).
+7. **The owner signs the new memory first** (`alfred-approve` there; approve all as the starting point).
+8. **Leave the home memory.** Delete the project's files and exports; add an event dated today with
+   `moves: { memory: "<name>", ids: [...] }` listing every moved id (shared sessions stay); a reason per moved id in the
+   session; definitions of the home memory that rested on moved ones link to them now. `alfred build` removes their
+   pages. The check lets each moved id go only if the new memory's signed state holds it (K5, K20).
+9. **The owner signs the home memory** (the moved removals come as one step).
+10. **Commit** each repository once (ASCII subject, `YYYY-MM-DD: <topic>`); push the repository of memories only with the
+    owner's go.
+
 ## 10. Agent rules (for every agent using Alfredish)
 
 1. At session start run `alfred check`, then read only `NOW.md`. During the session use `alfred check --quick` or
