@@ -14,7 +14,7 @@ import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals, vendorDir } from "./appro
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
 import { approveInteractive } from "./approve.ts";
 import { snapshot } from "./snapshot.ts";
-import { checkLocalPaths } from "./paths.ts";
+import { checkLocalPaths, confirmedPaths } from "./paths.ts";
 import type { Def, ISODate, KeyDef } from "./types.ts";
 import { buildViews } from "./views.ts";
 
@@ -125,7 +125,7 @@ done
         ...(await checkReachable(memoryDirAbs, new Set<unknown>([...defs, ...invalid.keys()]), base)),
         ...(await checkNewKeys(defs, repo, undefined, reference)),
         ...(await checkNewEvents(defs, repo, undefined, reference)),
-        ...checkLocalPaths(snap),
+        ...checkLocalPaths(snap, confirmedPaths(defs)),
       );
       console.log(formatCheck(report));
       // Steers any agent, whether or not it read AGENTS.md: approval is the owner's step, never the agent's.

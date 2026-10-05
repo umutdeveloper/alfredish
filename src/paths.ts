@@ -22,10 +22,29 @@ export const MUST_PASS = ["https://umutcakir.com/go-live-check", "repos/umutdeve
 /** Where a confirmed path may appear: the description Alfredish generates of a test that looks at it. */
 const TEST_FIELDS = /\.(verify|due)$/;
 
-export function checkLocalPaths(snap: Snapshot): Issue[] {
+/**
+ * Paths the owner confirmed with local() anywhere in the definitions — also inside a test (`file(local(...))`), whose
+ * record keeps only its description.
+ */
+export function confirmedPaths(defs: readonly unknown[]): Set<string> {
+  const out = new Set<string>();
+  const seen = new Set<unknown>();
+  const walk = (x: unknown, top: boolean) => {
+    if (!x || typeof x !== "object" || seen.has(x)) return;
+    seen.add(x);
+    const o = x as Record<string, unknown>;
+    if (o["kind"] === "local" && typeof o["path"] === "string" && o["confirmedBy"] === "owner") return void out.add(o["path"]);
+    if (!top && typeof o["id"] === "string" && typeof o["origin"] === "object") return; // another definition: its own walk
+    for (const v of Object.values(o)) walk(v, false);
+  };
+  for (const d of defs) walk(d, true);
+  return out;
+}
+
+export function checkLocalPaths(snap: Snapshot, alsoConfirmed: ReadonlySet<string> = new Set()): Issue[] {
   const broken = [...MUST_CATCH.filter((s) => !namesMachinePath(s)).map((s) => `missed: ${s}`), ...MUST_PASS.filter(namesMachinePath).map((s) => `false alarm: ${s}`)];
   if (broken.length) return [{ id: "K30", status: "red", rule: "K30", message: `the path check itself is broken: ${broken.join(" · ")}` }];
-  const confirmed = new Set<string>();
+  const confirmed = new Set<string>(alsoConfirmed);
   const texts: [string, string, string][] = []; // definition id, where, text
   const walk = (id: string, x: unknown, where: string) => {
     if (typeof x === "string") texts.push([id, where, x]);

@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { checkLocalPaths, MUST_CATCH, MUST_PASS, namesMachinePath } from "../src/paths.ts";
-import { file, local } from "../src/dsl.ts";
+import { file, local, promise, session } from "../src/dsl.ts";
+import { collect } from "../src/compiler.ts";
+import { snapshot } from "../src/snapshot.ts";
+import { confirmedPaths } from "../src/paths.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 import { fakeCtx } from "./helpers.ts";
 
@@ -29,6 +32,17 @@ describe("K30 — no machine path in a memory's text", () => {
     expect(checkLocalPaths(ok)).toEqual([]);
     const bad: Snapshot = { "a.reg": item("asset", { title: `Registry at ${where.path}`, location: where, verify: "review by owner" }) };
     expect(checkLocalPaths(bad).map((i) => i.id)).toEqual(["a.reg"]);
+  });
+});
+
+describe("K30 — a confirmed path inside a test", () => {
+  it("file(local(...)) in a promise's test counts as confirmed, though the record keeps only the description", () => {
+    const s = session({ id: "s", title: "s", at: "2026-10-05", topic: "t", questions: ["?"] });
+    const where = local("/Users/someone/memories/ada/memory/index.ts", { confirmedBy: "owner", at: "2026-10-05" });
+    const p = promise({ id: "promise.moveAda", title: "Move Ada", origin: s, owner: "agent", due: "2026-10-19", requires: [], doneWhen: file(where).exists(), evidence: "live" });
+    const { defs } = collect([p]);
+    expect(checkLocalPaths(snapshot(defs)).map((i) => i.id)).toEqual(["promise.moveAda"]); // without the definitions
+    expect(checkLocalPaths(snapshot(defs), confirmedPaths(defs))).toEqual([]);
   });
 });
 
