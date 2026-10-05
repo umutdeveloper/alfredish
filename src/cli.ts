@@ -6,7 +6,7 @@ import { chmod, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
-import { nodeContext, readSigned } from "./context.ts";
+import { linkedFromOthers, nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
 import { areaDefs, checkDrops, checkHistory, headSnapshot, judgeDrops, linkLine, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
@@ -94,7 +94,8 @@ done
     scope = (d) => area.has(d);
   } else if (quick || cmd !== "check") scope = () => false;
   const probeCache = await loadProbeCache(base);
-  const report = await compile(roots, { today: day, ctx, fileExists: ctx.fileExists, probeCache, ...(scope && { scope }) });
+  const linkedFrom = await linkedFromOthers(base);
+  const report = await compile(roots, { today: day, ctx, fileExists: ctx.fileExists, probeCache, linkedFrom, ...(scope && { scope }) });
   await saveProbeCache(base, probeCache);
   const snap = snapshot(defs);
 

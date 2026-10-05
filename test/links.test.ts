@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { compile, collect } from "../src/compiler.ts";
 import { linkLine, linkedRules } from "../src/repo.ts";
 import { buildViews } from "../src/views.ts";
-import { readSigned } from "../src/context.ts";
-import { decision, link, review, session } from "../src/dsl.ts";
+import { linkedFromOthers, readSigned } from "../src/context.ts";
+import { account, decision, link, review, session } from "../src/dsl.ts";
 import { recordName, sha256, signFile, type ApprovalRecord } from "../src/approval.ts";
 import { describeVerify } from "../src/snapshot.ts";
 import { shapeProblems } from "../src/validate.ts";
@@ -163,5 +163,26 @@ describe("§9.2 a link that follows the owner's rule instead of pinning it", () 
       'link({ id: "link.alfred.rule.talk.honest", title: "Honest", origin: <this session>, memory: "alfred", target: "rule.talk.honest", kind: "rule", follows: true, evidence: "human" })');
     expect(linkLine("alfred", "self.experience", { hash: H1, data: { kind: "fact", title: "Exp", evidence: "source" } })).toBe(
       `link({ id: "link.alfred.self.experience", title: "Exp", origin: <this session>, memory: "alfred", target: "self.experience", kind: "fact", hash: "${H1}", evidence: "source" })`);
+  });
+});
+
+describe("K12 — what another memory links to is used, though nothing in this memory uses it", () => {
+  it("an account a project memory's assets live on through a link is not unused", async () => {
+    const golive = await mkdtemp(join(tmpdir(), "alfredish-link-golive-"));
+    await mkdir(join(golive, "approvals"));
+    const rec: ApprovalRecord = { n: 1, at: today, base: null, alfredish: null, approved: { "link.alfred.account.google": { kind: "link", hash: "e5e5e5e5e5e5e5e5", data: { kind: "link", id: "link.alfred.account.google", memory: "alfred", target: "account.google" } } }, removed: [], rejected: {}, corrections: {} };
+    const file = join(golive, "approvals", recordName(1));
+    await writeFile(file, JSON.stringify(rec, null, 1));
+    const r = await signFile(file, join(keys, "owner"));
+    if (!r.ok) throw new Error(r.out);
+    const both = join(keys, "memories-both.json");
+    await writeFile(both, JSON.stringify({ alfred, golive }));
+    const linked = await linkedFromOthers(alfred, { memoriesFile: both, anchor: join(keys, "anchor.pub") });
+    expect([...linked]).toEqual(["account.google"]);
+    expect([...(await linkedFromOthers(golive, { memoriesFile: both, anchor: join(keys, "anchor.pub") }))]).toEqual([]);
+    const google = account({ id: "account.google", title: "Google", origin: s, service: "google.com", owner: "owner", login: "x", agentAccess: "none", verify: review({ by: "owner", at: today, every: "90d" }), evidence: "human" });
+    const k12 = async (o: { linkedFrom?: Set<string> }) => (await compile([google], { today, ctx: ctx(), ...o })).issues.filter((i) => i.rule === "K12").map((i) => i.message);
+    expect(await k12({})).toEqual(["no asset uses this account"]);
+    expect(await k12({ linkedFrom: linked })).toEqual([]);
   });
 });

@@ -41,6 +41,34 @@ export async function readSigned(memory: string, id: string, pinned: string, o: 
   return was ? { hash: now.hash, data: now.data, was } : { hash: now.hash, data: now.data };
 }
 
+/**
+ * K12: the ids of this memory that other memories registered on this machine link to in their signed state — what
+ * they rest on here. A memory whose records do not check out adds nothing (its own check is red).
+ */
+export async function linkedFromOthers(base: string, o: { memoriesFile?: string; anchor?: string } = {}): Promise<Set<string>> {
+  const out = new Set<string>();
+  let reg: Record<string, unknown>;
+  try {
+    reg = JSON.parse(await readFile(o.memoriesFile ?? MEMORIES_FILE, "utf8")) as Record<string, unknown>;
+  } catch {
+    return out;
+  }
+  const here = resolve(base);
+  const names = Object.entries(reg).filter(([, w]) => typeof w === "string" && resolve(w) === here).map(([n]) => n);
+  if (!names.length) return out;
+  const anchor = o.anchor ?? process.env["ALFREDISH_ANCHOR"] ?? DEFAULT_ANCHOR;
+  for (const [, where] of Object.entries(reg)) {
+    if (typeof where !== "string" || resolve(where) === here) continue;
+    const { state, issues } = await loadApprovals(where, anchor);
+    if (!state || issues.length) continue;
+    for (const it of state.items.values()) {
+      const d = it.data;
+      if (it.kind === "link" && names.includes(String(d["memory"])) && typeof d["target"] === "string") out.add(d["target"]);
+    }
+  }
+  return out;
+}
+
 // 30 s: some sites answer through a redirect in 10-20 s (YouTube's channel pages); probes run in parallel, so a slow
 // site costs one wait, not one per probe.
 export function nodeContext(baseDir: string, timeoutMs = 30_000): ProbeContext {

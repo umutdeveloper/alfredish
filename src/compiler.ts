@@ -32,6 +32,8 @@ export interface CompileOptions {
   probeCache?: ProbeCache;
   /** Definitions whose probes (and their chains') are forced live; omitted = every probe (SPEC §9). */
   scope?: (d: Def) => boolean;
+  /** K12: ids of this memory that other memories link to in their signed state; they count as used. */
+  linkedFrom?: ReadonlySet<string>;
   /** Current time in ms, for the cache's 24-hour window. */
   now?: number;
 }
@@ -417,6 +419,7 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
   };
   for (const d of defs) if (ROOTS.has(d.kind) || (d.kind === "fact" && d.id.startsWith("self."))) markUsed(d);
   for (const d of defs) if (d.kind === "idea") for (const b of d.basedOn ?? []) markUsed(b);
+  for (const d of defs) if (o.linkedFrom?.has(d.id)) markUsed(d);
   let parked = 0;
   const parkedCheck = async (id: string, p: { reason: string; revisitWhen: Verify }) => {
     parked++;
