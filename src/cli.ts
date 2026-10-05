@@ -101,7 +101,7 @@ done
     case "build": {
       const approval = existsSync(join(base, APPROVALS_DIR));
       const changed = await writeViews(buildViews(defs, report, day, { approval }), snap, repo);
-      console.log(changed.length ? changed.map((c) => `written: ${c}`).join("\n") : "no changes");
+      console.log(changed.length ? changed.map((c) => (c.startsWith("removed ") ? c.replace("removed ", "removed: ") : `written: ${c}`)).join("\n") : "no changes");
       return 0;
     }
     case "check": {
@@ -138,7 +138,7 @@ done
         return 1;
       }
       // A past record may be offered for removal only when it moved into another memory that signed it (K5).
-      const moved = new Set([...(await movedAway(snap, day, ctx))].filter(([, m]) => !m.why).map(([id]) => id));
+      const moved = new Map([...(await movedAway(snap, day, ctx))].filter(([, m]) => !m.why).map(([id, m]) => [id, m.memory] as const));
       return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, invalid: [...invalid.keys()].map((d) => d.id), moved, ...(agentSocket && { agentSocket }) });
     }
     case "keys": {

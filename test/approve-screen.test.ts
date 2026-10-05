@@ -126,6 +126,21 @@ describe("alfred approve — machine-checked changes together", () => {
   });
 });
 
+describe("alfred approve — definitions that moved into another memory", () => {
+  it("their removals come as one step per destination, and one press removes them all", () => {
+    const gone = (id: string, kind: string): (typeof changes)[number] => ({ id, op: "-", kind, group: "owner", detail: "", shown: [] });
+    const list = [gone("esik.a", "fact"), gone("event.esik.b", "event"), gone("idea.other", "idea")];
+    const s = newScreen(entriesFor(list, { firstRound: false, moved: new Map([["esik.a", "esik"], ["event.esik.b", "esik"]]) }));
+    const text = plain(render(s));
+    expect(text).toContain("2 definitions moved to esik");
+    expect(text).toContain("- event.esik.b  (event)");
+    keys(s, "return");
+    expect(s.decisions.get("esik.a")).toEqual({ kind: "approve" });
+    expect(s.decisions.get("event.esik.b")).toEqual({ kind: "approve" });
+    expect(s.entries[s.cur]!.key).toBe("idea.other"); // a removal that did not move is still decided on its own
+  });
+});
+
 describe("alfred approve — the memory's copy of Alfredish (§14, K28)", () => {
   it("says whether the copy is exactly the commit it names, and lists the commits since the last approved one", async () => {
     const root = await mkdtemp(join(tmpdir(), "alfredish-copy-test-"));

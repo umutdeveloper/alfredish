@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { tk } from "./helpers.ts";
-import { mkdtemp, readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,6 +60,20 @@ describe("K6 — generated views", () => {
       "sessions/s.2026-10-01.md", "library/r.scan.md", "library/INDEX.md", "memory/snapshot.json",
     ]));
     expect(await checkViews(x.views, x.snap, x.repo)).toEqual([]);
+  });
+
+  it("build removes a generated page whose definition is gone, and leaves a hand-written one (still red)", async () => {
+    const x = await run(memory(), "2026-10-03");
+    await writeViews(x.views, x.snap, x.repo);
+    const orphan = join(base, "library/r.gone.md");
+    await writeFile(orphan, await readFile(join(base, "library/r.scan.md"), "utf8"));
+    const note = join(base, "library/my-note.md");
+    await writeFile(note, "# my note\n");
+    expect(await writeViews(x.views, x.snap, x.repo)).toContain("removed library/r.gone.md");
+    await expect(readFile(orphan, "utf8")).rejects.toThrow();
+    expect(await readFile(note, "utf8")).toBe("# my note\n");
+    expect((await checkViews(x.views, x.snap, x.repo)).map((i) => i.id)).toEqual(["library/my-note.md"]);
+    await rm(note);
   });
 
   it("a hand edit is caught", async () => {

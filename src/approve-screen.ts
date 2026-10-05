@@ -13,6 +13,7 @@ const W = {
     noteEmpty: "write the note first", keys: "← → choose · enter apply · ↑ ↓ previous / next · q quit", keysNote: "type · enter save · esc cancel",
     summary: "summary", nothing: "Nothing decided: nothing will be recorded.", signHint: "Signing asks for your fingerprint once. Give it only if the prompt names your terminal.",
     start: (n: number) => `First approval: ${n} definitions make up the memory today.`, startWhy: "Approve the memory as it is as your starting point, or look at each definition.",
+    moved: (n: number, m: string) => `${n} definitions moved to ${m}`, movedWhy: (m: string) => `each is in ${m}'s owner-signed state, where you approved it; approve their removal here together, or look one by one`,
     machine: (n: number) => `${n} machine-checked changes`, machineWhy: "each is checked by a built-in test that looks at the world (shown below); approve them together, or look one by one",
     vendor: "the memory's copy of Alfredish", noReason: "(no reason given)", sessionWhy: "the session record: its topic, questions and the reasons above",
     ops: { "+": "new", "~": "changed", "-": "removed" }, approved: "approved", corrected: "correction", rejected: "rejected", skipped: "skipped",
@@ -34,12 +35,19 @@ export interface Entry {
 
 export const VENDOR_KEY = "vendor/alfredish";
 
-export function entriesFor(changes: readonly Change[], o: { vendor?: string[]; firstRound: boolean }): Entry[] {
+export function entriesFor(changes: readonly Change[], o: { vendor?: string[]; firstRound: boolean; moved?: ReadonlyMap<string, string> }): Entry[] {
   const w = W;
   const out: Entry[] = [];
   if (o.firstRound) out.push({ key: "__start", title: w.start(changes.length), sub: "", why: w.startWhy, lines: [], buttons: ["startAll", "startOne"], start: true });
   if (o.vendor) out.push({ key: VENDOR_KEY, title: w.vendor, sub: "", why: "", lines: o.vendor, buttons: ["approve", "skip"] });
   const machine = changes.filter((c) => c.group === "machine");
+  // Removals of definitions that moved into another memory, offered together (one step per destination).
+  const moved = changes.filter((c) => c.op === "-" && o.moved?.has(c.id));
+  for (const dest of [...new Set(moved.map((c) => o.moved!.get(c.id)!))]) {
+    const these = moved.filter((c) => o.moved!.get(c.id) === dest);
+    if (these.length < 2) continue;
+    out.push({ key: `__moved:${dest}`, title: w.moved(these.length, dest), sub: "", why: w.movedWhy(dest), lines: these.map((c) => `- ${c.id}  (${c.kind})`), buttons: ["approveGroup", "startOne"], start: true, members: these.map((c) => c.id) });
+  }
   for (const c of changes) {
     if (machine.length > 1 && c === machine[0]) {
       const lines = machine.flatMap((m) => [`${m.op} ${m.id}${m.why ? ` — ${m.why}` : ""}`, `    test: ${m.test ?? "?"}`]);

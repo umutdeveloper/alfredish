@@ -2,7 +2,7 @@
 // areas and the probe cache (SPEC §9).
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import { dirname, join, relative, resolve as resolvePath, sep } from "node:path";
@@ -242,6 +242,20 @@ export async function writeViews(views: readonly View[], snap: Snapshot, o: Repo
   };
   for (const v of views) await put(v.path, render(v));
   await put(snapshotPath(o), snapshotText(snap));
+  // A generated page whose definition is gone (retired, or moved into another memory) goes too; a hand-written one stays
+  // and stays red (K6).
+  const expected = new Set(views.map((v) => v.path));
+  for (const dir of ["sessions", "library"]) {
+    const names = await readdir(join(o.base, dir)).catch(() => [] as string[]);
+    for (const n of names.filter((x) => x.endsWith(".md"))) {
+      const rel = `${dir}/${n}`;
+      const text = expected.has(rel) ? undefined : await readOrUndefined(join(o.base, rel));
+      if (text !== undefined && parseGenerated(text)) {
+        await rm(join(o.base, rel));
+        changed.push(`removed ${rel}`);
+      }
+    }
+  }
   return changed;
 }
 

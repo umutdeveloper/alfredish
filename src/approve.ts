@@ -303,10 +303,10 @@ async function installedFrom(): Promise<string | undefined> {
 }
 
 /** The terminal dialogue (run by the owner): the arrow-key screen in a terminal, plain questions otherwise. */
-export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate; invalid?: readonly string[]; moved?: ReadonlySet<string> }): Promise<number> {
+export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate; invalid?: readonly string[]; moved?: ReadonlyMap<string, string> }): Promise<number> {
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const changes = changesSince(o.state, o.snap, tty && !process.env["NO_COLOR"] ? COLOURS : PLAIN);
-  const blockers = await approveBlockers({ base: o.base, invalid: o.invalid ?? [], changes, ...(o.moved && { moved: o.moved }) });
+  const blockers = await approveBlockers({ base: o.base, invalid: o.invalid ?? [], changes, ...(o.moved && { moved: new Set(o.moved.keys()) }) });
   const plan = selfUpdate(blockers, { lib: dirname(TOOL_SRC), env: process.env, exists: existsSync });
   if (plan && "run" in plan) {
     const commit = plan.run[plan.run.length - 1]!;
@@ -332,7 +332,7 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
   }
   const copy = vendorChanged ? await alfredishCopyInfo(o.base, o.state?.last?.pinned, await installedFrom()) : undefined;
   const firstRound = !o.state?.records;
-  const answers = tty ? await askOnScreen(changes, copy?.lines, firstRound) : await askByLines(changes, copy?.lines, firstRound);
+  const answers = tty ? await askOnScreen(changes, copy?.lines, firstRound, o.moved) : await askByLines(changes, copy?.lines, firstRound);
   if (!answers) {
     console.log("Quit: nothing recorded.");
     return 0;
@@ -354,8 +354,8 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
 type Answers = { decisions: Map<string, Decision>; approveVendor: boolean } | undefined;
 
 /** The arrow-key screen. Undefined when the owner quits. */
-async function askOnScreen(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean): Promise<Answers> {
-  const screen = newScreen(entriesFor(changes, { firstRound, ...(vendorLines && { vendor: vendorLines }) }));
+async function askOnScreen(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean, moved?: ReadonlyMap<string, string>): Promise<Answers> {
+  const screen = newScreen(entriesFor(changes, { firstRound, ...(vendorLines && { vendor: vendorLines }), ...(moved && { moved }) }));
   const out = process.stdout;
   const draw = () => out.write(`\x1b[H\x1b[2J${render(screen)}`);
   emitKeypressEvents(process.stdin);
