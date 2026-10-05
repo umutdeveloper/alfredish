@@ -43,6 +43,8 @@ export interface ApprovedState {
   items: Map<string, ApprovedItem>;
   rejected: Map<string, { hash: string; note?: string }>;
   corrections: Map<string, { hash: string; note: string }>;
+  /** Every id a signed record removed (K32: a drop already signed has nothing left to judge). */
+  removed?: Set<string>;
 }
 
 /**
@@ -189,7 +191,10 @@ export async function loadApprovals(base: string, anchorPath: string): Promise<{
       state.rejected.delete(k); // approved later: an earlier rejection or correction note is settled
       state.corrections.delete(k);
     }
-    for (const k of rec.removed) state.items.delete(k);
+    for (const k of rec.removed) {
+      state.items.delete(k);
+      (state.removed ??= new Set()).add(k);
+    }
     for (const [k, v] of Object.entries(rec.rejected)) state.rejected.set(k, v);
     for (const [k, v] of Object.entries(rec.corrections)) state.corrections.set(k, v);
     state.records++;

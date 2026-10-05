@@ -69,6 +69,9 @@ export async function checkViews(views: readonly View[], snap: Snapshot, o: Repo
   return issues;
 }
 
+/** The memory as last committed: the reference when it has no owner approvals yet. */
+export const headSnapshot = (o: RepoOptions): Promise<Snapshot | undefined> => snapshotAt("HEAD", o);
+
 async function snapshotAt(ref: string, o: RepoOptions): Promise<Snapshot | undefined> {
   const r = await o.ctx.run("git", ["show", `${ref}:./${snapshotPath(o)}`], o.base);
   if (r.code !== 0) return undefined;
@@ -85,8 +88,10 @@ export async function checkPast(snap: Snapshot, today: ISODate, o: RepoOptions, 
   if (!head) return [];
   const issues: Issue[] = [];
   const moved = await movedAway(snap, today, o.ctx);
+  const dropped = droppedIds(snap, today);
   for (const [id, old] of Object.entries(head)) {
     if (!PAST.has(old.kind)) continue;
+    if (!snap[id] && old.kind === "event" && dropped.has(id)) continue; // K32 decides whether it may leave
     const at = String(old.data["at"] ?? "");
     if (!(at < today)) continue; // same day: corrections allowed
     const now = snap[id];
@@ -98,6 +103,66 @@ export async function checkPast(snap: Snapshot, today: ISODate, o: RepoOptions, 
   }
   return issues;
 }
+
+/** K32: the past events that today's events drop as repeats, each with the event it retold. */
+export function droppedIds(snap: Snapshot, today: ISODate): Map<string, { by: string; repeatOf: string }> {
+  const out = new Map<string, { by: string; repeatOf: string }>();
+  for (const [by, e] of Object.entries(snap)) {
+    if (e.kind !== "event" || e.data["at"] !== today || !Array.isArray(e.data["drops"])) continue;
+    for (const d of e.data["drops"] as { id?: unknown; repeatOf?: unknown }[]) {
+      const kept = refId(d.repeatOf);
+      if (typeof d.id === "string" && kept) out.set(d.id, { by, repeatOf: kept });
+    }
+  }
+  return out;
+}
+
+export interface Drop {
+  repeatOf: string;
+  score: number;
+  /** The kept event as it is now, shown next to the dropped one in alfred approve. */
+  kept: Record<string, unknown>;
+}
+
+/**
+ * K32: a past event may leave as a repeat only when it was a signed event, is gone, retold another event of the memory
+ * (at least EVENT_SIMILARITY_THRESHOLD close) and leaves nothing it affected unrecorded. Returns the drops that pass.
+ */
+export async function judgeDrops(snap: Snapshot, today: ISODate, reference: Snapshot | undefined, embed: () => Promise<Embed> = embedder, signedAway?: ReadonlySet<string>): Promise<{ issues: Issue[]; valid: Map<string, Drop> }> {
+  const issues: Issue[] = [];
+  const valid = new Map<string, Drop>();
+  const red = (id: string, message: string) => issues.push({ id, status: "red", rule: "K32", message });
+  let e: Embed | undefined;
+  for (const [id, { by, repeatOf }] of droppedIds(snap, today)) {
+    const old = reference?.[id];
+    const kept = snap[repeatOf];
+    if (!old && !snap[id] && signedAway?.has(id)) continue; // the owner already signed this drop
+    if (!old || old.kind !== "event") { red(id, "dropped, but it is not an event of the signed state"); continue; }
+    if (snap[id]) { red(id, "dropped, but it still exists — remove it, or take it out of drops"); continue; }
+    if (!kept || kept.kind !== "event" || repeatOf === id) { red(id, `dropped in favour of ${repeatOf}, which is not another event of this memory`); continue; }
+    try {
+      e ??= await embed();
+    } catch (err) {
+      red(id, `cannot compare events: ${(err as Error).message}`);
+      continue;
+    }
+    const text = (d: Record<string, unknown>) => eventText({ title: String(d["title"] ?? ""), text: String(d["text"] ?? "") });
+    const score = cosine(await e(text(old.data)), await e(text(kept.data)));
+    if (score < EVENT_SIMILARITY_THRESHOLD) {
+      red(id, `not a repeat of ${repeatOf} (${score.toFixed(2)} < ${EVENT_SIMILARITY_THRESHOLD.toFixed(2)}) — only a retelling may be dropped`);
+      continue;
+    }
+    const refs = (d: Record<string, unknown>) => new Set((Array.isArray(d["affects"]) ? d["affects"] : []).map(refId).filter((x): x is string => x !== undefined));
+    const covered = new Set([...refs(kept.data), ...refs(snap[by]!.data)]);
+    const lost = [...refs(old.data)].filter((x) => snap[x] && !covered.has(x));
+    for (const x of lost) red(id, `it affected ${x}, which neither ${repeatOf} nor ${by} affects — add it to the dropping event's affects`);
+    if (!lost.length) valid.set(id, { repeatOf, score, kept: kept.data });
+  }
+  return { issues, valid };
+}
+
+export const checkDrops = async (snap: Snapshot, today: ISODate, reference: Snapshot | undefined, embed?: () => Promise<Embed>, signedAway?: ReadonlySet<string>): Promise<Issue[]> =>
+  (await judgeDrops(snap, today, reference, embed, signedAway)).issues;
 
 const PRESENT_KINDS = new Set(["fact", "claim", "decision", "promise", "goal", "idea", "account", "asset", "rule", "link", "key"]);
 

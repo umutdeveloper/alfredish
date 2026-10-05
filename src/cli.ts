@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkHistory, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkDrops, checkHistory, headSnapshot, judgeDrops, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
 import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals, vendorDir } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
@@ -119,6 +119,7 @@ done
         ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined, linkedRules: linked }), snap, repo)),
         ...ownerRules(defs, linked),
         ...(await checkPast(snap, day, repo, reference)),
+        ...(await checkDrops(snap, day, reference ?? (await headSnapshot(repo)), undefined, signed?.removed)),
         ...(await checkImports(repo)),
         ...(await checkTypeEscapes(repo)),
         ...(await checkHistory(snap, day, repo, reference)),
@@ -141,9 +142,13 @@ done
         console.log(approvals.issues.map((i) => `✗ ${i.id} — ${i.rule}: ${i.message}`).join("\n"));
         return 1;
       }
-      // A past record may be offered for removal only when it moved into another memory that signed it (K5).
+      // A past record may be offered for removal only when it moved into another memory that signed it (K5), or when it
+      // is an event dropped as a repeat that passes K32.
       const moved = new Map([...(await movedAway(snap, day, ctx))].filter(([, m]) => !m.why).map(([id, m]) => [id, m.memory] as const));
-      return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, invalid: [...invalid.keys()].map((d) => d.id), moved, ...(agentSocket && { agentSocket }) });
+      const signedRef = approvals.state && approvals.state.records > 0 ? referenceSnapshot(approvals.state) : undefined;
+      const drops = await judgeDrops(snap, day, signedRef, undefined, approvals.state?.removed);
+      const dropIssues = new Map(drops.issues.map((i) => [i.id, i.message] as const));
+      return approveInteractive({ base, snap, state: approvals.state, anchorPath: anchor, today: day, invalid: [...invalid.keys()].map((d) => d.id), moved, dropped: drops.valid, dropIssues, ...(agentSocket && { agentSocket }) });
     }
     case "keys": {
       const keys = defs.filter((d): d is KeyDef => d.kind === "key");

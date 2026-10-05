@@ -185,8 +185,10 @@ export interface EventDef {
   retires?: readonly string[];
   /** Definitions (past ones too) that moved on this event's day into another memory, where the owner signed them (K5, K20). */
   moves?: { memory: string; ids: readonly string[] };
-  /** K29: close events (by meaning) it was compared with and that tell another happening. */
-  distinctFrom?: readonly EventDef[];
+  /** Past events removed on this event's day because they only retold the kept event `repeatOf` (K32). */
+  drops?: readonly { id: string; repeatOf: EventDef }[];
+  /** K29: close events (by meaning) it was compared with and that tell another happening; a dropped one is `retired(id)` (K32). */
+  distinctFrom?: readonly (EventDef | RetiredRef)[];
   /** K29: the earlier event that told this happening wrongly; this one corrects it. */
   corrects?: EventDef;
 }

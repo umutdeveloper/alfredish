@@ -1,5 +1,5 @@
 // Alfredish compiler: evaluates every definition and applies the SPEC §7 rules that need no repository.
-import type { Def, Duration, Finding, ISODate, PresentDef, ProbeCache, ProbeContext, ProbeVerify, Status, Verify } from "./types.ts";
+import type { Def, Duration, EventDef, Finding, ISODate, PresentDef, ProbeCache, ProbeContext, ProbeVerify, Status, Verify } from "./types.ts";
 import { looksLikeDef, shapeProblems } from "./validate.ts";
 
 export interface Issue {
@@ -97,7 +97,7 @@ function children(d: Def): Def[] {
   if (d.kind === "idea") out.push(...verifyDeps(d.verify), ...(d.basedOn ?? []));
   if (d.kind === "promise" && typeof d.due !== "string") out.push(...verifyDeps(d.due));
   if (d.kind === "decision" && d.supersedes) out.push(d.supersedes);
-  if (d.kind === "event") out.push(...d.affects.filter(isDef), ...(d.distinctFrom ?? []), ...(d.corrects ? [d.corrects] : []));
+  if (d.kind === "event") out.push(...d.affects.filter(isDef), ...(d.distinctFrom ?? []).filter((x): x is EventDef => isDef(x)), ...(d.corrects ? [d.corrects] : []), ...(d.drops ?? []).map((x) => x.repeatOf));
   if (d.kind === "key") out.push(...(d.distinctFrom ?? []));
   if (d.kind === "fact" && d.key) out.push(d.key);
   if (d.kind === "fact" && d.parked) out.push(...verifyDeps(d.parked.revisitWhen));
@@ -442,12 +442,12 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     }
   }
 
-  // K20: a past event may name a retired definition only if it is gone and some event retired it.
-  const retiredIds = new Set(defs.flatMap((d) => (d.kind === "event" ? (d.retires ?? []) : [])));
+  // K20: a past event may name a retired definition only if it is gone and some event retired it (or dropped it, K32).
+  const retiredIds = new Set(defs.flatMap((d) => (d.kind === "event" ? [...(d.retires ?? []), ...(d.drops ?? []).map((x) => x.id)] : [])));
   const liveIds = new Set(defs.map((d) => d.id));
   for (const d of defs) {
     if (d.kind !== "event") continue;
-    for (const a of d.affects) {
+    for (const a of [...d.affects, ...(d.distinctFrom ?? [])]) {
       if (isDef(a)) continue;
       if (liveIds.has(a.id)) issues.push({ id: d.id, status: "red", rule: "K20", message: `retired("${a.id}") but ${a.id} still exists — refer to it directly` });
       else if (!retiredIds.has(a.id)) issues.push({ id: d.id, status: "red", rule: "K20", message: `retired("${a.id}") but no event retires it — list it in an event's retires and say why` });

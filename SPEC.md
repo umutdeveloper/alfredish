@@ -89,7 +89,7 @@ it does not add a second one.
 | Type | What | Required fields | Rule |
 |---|---|---|---|
 | `session` | A working session | `at`, `topic`, `questions` | The session note and log line are generated from it and from the definitions born in it |
-| `event` | Something that happened | `at`, `text`; optional `affects`, `distinctFrom` / `corrects` (K29), `moves` (`{ memory, ids }`: definitions, past ones too, that moved into another memory that day), `retires` (ids of present-tense definitions removed that day, K20) | Immutable once its day has passed |
+| `event` | Something that happened | `at`, `text`; optional `affects`, `distinctFrom` / `corrects` (K29), `moves` (`{ memory, ids }`: definitions, past ones too, that moved into another memory that day), `retires` (ids of present-tense definitions removed that day, K20), `drops` (`[{ id, repeatOf }]`: past events removed that day because they retold the kept event `repeatOf`, K32) | Immutable once its day has passed |
 | `research` | A piece of research | `at`, `question`, `findings`, `readWhen`; optional `rawData` | Its readable page is generated from the findings. Immutable once its day has passed |
 
 **Finding:** one result of a research. `text`, optional `value`, optional `source` (URL or a place in `rawData`).
@@ -126,7 +126,7 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 - **K2 — Links:** links are imports. A broken link is a compile error. (Type level.)
 - **K3 — Propagation:** if a definition is red, everything linked to it through `restsOn` / `requires` / `derived` / `on` / `fromFinding` is red too (an idea's `basedOn` and conditions do not propagate). The reason is shown as a chain.
 - **K4 — Public claims:** a `claim` may rest on a `fact` only if that fact's evidence is `live` or `source`. Decisions, rules and other present-tense definitions (our own choices) may be claim dependencies. (Type level + compiler.)
-- **K5 — The past is immutable:** changing or deleting a `session`, `event` or `research` after its day is a compile error. Same-day corrections are allowed. (Checked against git history.)
+- **K5 — The past is immutable:** changing or deleting a `session`, `event` or `research` after its day is a compile error. Same-day corrections are allowed. (Checked against git history.) Two exceptions, each signed by the owner as its own step: a record that moved into another memory (K20, §9.4), and an event that only retold another (K32).
 - **K6 — Views are generated, never hand-written:** `NOW.md`, `decisions.md`, `promises.md`, `ideas.md`, `roadmap.md`, `profile.md`, `AGENTS.md`, `sessions/*.md`, `log.md`, `library/*.md`, `library/INDEX.md`. A hand edit (body hash mismatch), a stale view, or a hand-written `.md` in `sessions/` or `library/` is a compile error.
 - **K7 — Drift:** for an `asset`, `desired` is compared with the world. Any difference is red, whoever made it.
 - **K8 — Expiry:** an expired verification is red. The last 20% of its window is yellow.
@@ -157,8 +157,8 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
 - **K20 — Nothing disappears silently:** a present-tense definition that is in the last commit and is gone now is red,
   unless an `event` dated today lists its id in `retires` (its `text` says why). Compared with `HEAD`; once owner
   approval exists, with the last signed record. A past event that `affects` a retired definition names it with
-  `retired("<id>")`, which is recorded exactly like the live reference was, so the past is unchanged (K5); red if the id
-  still exists or no event retires it. A definition (of any kind, past ones too, K5) may also leave because it **moved** into another
+  `retired("<id>")` (in `affects` or `distinctFrom`), which is recorded exactly like the live reference was, so the past is unchanged (K5); red if the id
+  still exists or no event retires or drops it (K32). A definition (of any kind, past ones too, K5) may also leave because it **moved** into another
   memory: an event dated today lists it in `moves: { memory, ids }`, and that memory's owner-signed state holds it
   (read as in §9.2); until the owner approves it there, it may not leave. Keys are covered like other present-tense
   definitions.
@@ -214,6 +214,18 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   path, is red. The check first proves itself on every known path form and on ordinary text (a site path, `TCP/IP`) and
   is red if that proof fails. Memories are carried and pushed; a machine path is wrong on the next machine and leaks
   the owner's layout.
+
+- **K32 — A repeat may leave:** an event that only retold a happening another event already records may be removed,
+  once, by an event dated today that lists it in `drops: [{ id, repeatOf }]` (its `text` says why). The drop is
+  checked against the last signed record (K28): `id` must be an event there and gone now; `repeatOf` must be another
+  event of the memory; the two must be at least as close as K29's threshold (**0.78**, the same model), so "repeat"
+  cannot remove an arbitrary past record; and every definition the dropped event `affects` that still exists must be
+  in the `affects` of `repeatOf` or of the dropping event, so nothing loses the record of what changed it. A past
+  event that named the dropped one names it with `retired("<id>")`. Red otherwise, and red when the model cannot be
+  used. Only events: a session or research is never dropped. A conflict is not a repeat — it stays, and the newer
+  account `corrects` it (K29). `alfred approve` shows each drop as its own step: the dropped event in full, the kept
+  one in full, their score and the reason; the first button is **skip**, so a removal is never signed by pressing on.
+  Nothing is lost: the dropped event stays in the signed records and in git history.
 
 ## 8. Statuses
 
@@ -450,7 +462,8 @@ sees the note again next to the new version.
 **When it refuses.** `alfred approve` shows nothing and signs nothing when it could show something false: when the
 memory's copy of Alfredish (`vendor/alfredish/src`) is not exactly the code the tool runs (it could misread the memory —
 an older tool once read three past events it did not understand as removed; reinstall it from that version), when a
-definition cannot be read (K16), or when a past record (event, session, research) would be marked removed (K5). When the
+definition cannot be read (K16), or when a past record (event, session, research) would be marked removed (K5) without
+having moved into a memory that signed it (§9.4) or having been dropped as a repeat that passes K32. When the
 only reason is another Alfredish, it updates itself instead: it runs its own root-owned copy of the installer with sudo
 (the owner's password is the consent), which takes only the memory's pinned commit from the Alfredish source as the
 owner (never as root) and leaves the anchor, node and the command as they are; then it starts again, once.

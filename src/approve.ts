@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { entriesFor, newScreen, render, step, VENDOR_KEY, type Key } from "./approve-screen.ts";
+import { entriesFor, newScreen, render, step, VENDOR_KEY, type Key, type ShownDrop } from "./approve-screen.ts";
 import { APPROVALS_DIR, hashTree, loadApprovals, readAnchor, recordName, run, sha256, sharedCopyRoot, signFile, vendorDir, type ApprovalRecord, type ApprovedState } from "./approval.ts";
 import { diffSnapshots, type Snapshot } from "./snapshot.ts";
 import type { ISODate } from "./types.ts";
@@ -268,7 +268,7 @@ export interface Blocker {
   update?: string;
 }
 
-export async function approveBlockers(o: { base: string; invalid: readonly string[]; changes: readonly Change[]; toolSrc?: string; moved?: ReadonlySet<string> }): Promise<Blocker[]> {
+export async function approveBlockers(o: { base: string; invalid: readonly string[]; changes: readonly Change[]; toolSrc?: string; moved?: ReadonlySet<string>; dropped?: ReadonlyMap<string, unknown>; dropIssues?: ReadonlyMap<string, string> }): Promise<Blocker[]> {
   const out: Blocker[] = [];
   const mine = await hashTree(o.toolSrc ?? TOOL_SRC);
   const memory = await hashTree(join(vendorDir(o.base), "src"));
@@ -278,7 +278,11 @@ export async function approveBlockers(o: { base: string; invalid: readonly strin
     out.push({ message: `this alfred-approve is not the Alfredish this memory uses (${pinned || "?"}), so it could misread it`, ...(commit && { update: commit }) });
   }
   if (o.invalid.length) out.push({ message: `${o.invalid.length} definition${o.invalid.length === 1 ? "" : "s"} cannot be read: ${o.invalid.join(", ")} — fix them first (alfred check shows why)` });
-  for (const c of o.changes) if (c.op === "-" && PAST_KINDS.has(c.kind) && !o.moved?.has(c.id)) out.push({ message: `${c.id} is a past record (${c.kind}) and would be marked removed — the past is never removed (K5); this is a bug or tampering` });
+  for (const c of o.changes) if (c.op === "-" && PAST_KINDS.has(c.kind) && !o.moved?.has(c.id) && !(c.kind === "event" && o.dropped?.has(c.id))) {
+    const refused = c.kind === "event" ? o.dropIssues?.get(c.id) : undefined;
+    if (refused) out.push({ message: `${c.id} is dropped as a repeat, but K32 refuses it: ${refused} — nothing is removed until alfred check shows the drop green` });
+    else out.push({ message: `${c.id} is a past record (${c.kind}) and would be marked removed — the past is never removed (K5) unless it moved (§9.4) or was dropped as a repeat (K32); this is a bug or tampering` });
+  }
   return out;
 }
 
@@ -303,10 +307,10 @@ async function installedFrom(): Promise<string | undefined> {
 }
 
 /** The terminal dialogue (run by the owner): the arrow-key screen in a terminal, plain questions otherwise. */
-export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate; invalid?: readonly string[]; moved?: ReadonlyMap<string, string> }): Promise<number> {
+export async function approveInteractive(o: { base: string; snap: Snapshot; state: ApprovedState | undefined; anchorPath: string; agentSocket?: string; today: ISODate; invalid?: readonly string[]; moved?: ReadonlyMap<string, string>; dropped?: ReadonlyMap<string, ShownDrop>; dropIssues?: ReadonlyMap<string, string> }): Promise<number> {
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const changes = changesSince(o.state, o.snap, tty && !process.env["NO_COLOR"] ? COLOURS : PLAIN);
-  const blockers = await approveBlockers({ base: o.base, invalid: o.invalid ?? [], changes, ...(o.moved && { moved: new Set(o.moved.keys()) }) });
+  const blockers = await approveBlockers({ base: o.base, invalid: o.invalid ?? [], changes, ...(o.moved && { moved: new Set(o.moved.keys()) }), ...(o.dropped && { dropped: o.dropped }), ...(o.dropIssues && { dropIssues: o.dropIssues }) });
   const plan = selfUpdate(blockers, { lib: dirname(TOOL_SRC), env: process.env, exists: existsSync });
   if (plan && "run" in plan) {
     const commit = plan.run[plan.run.length - 1]!;
@@ -342,7 +346,7 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
   const copy = vendorChanged ? await alfredishCopyInfo(o.base, repoLast ? repoLast.pinned : o.state?.last?.pinned, await installedFrom()) : undefined;
   if (copy && root) copy.lines.unshift("shared by every memory of this repository of memories: this one approval covers them all", "");
   const firstRound = !o.state?.records;
-  const answers = tty ? await askOnScreen(changes, copy?.lines, firstRound, o.moved) : await askByLines(changes, copy?.lines, firstRound);
+  const answers = tty ? await askOnScreen(changes, copy?.lines, firstRound, o.moved, o.dropped) : await askByLines(changes, copy?.lines, firstRound, o.dropped);
   if (!answers) {
     console.log("Quit: nothing recorded.");
     return 0;
@@ -375,8 +379,8 @@ export async function approveInteractive(o: { base: string; snap: Snapshot; stat
 type Answers = { decisions: Map<string, Decision>; approveVendor: boolean } | undefined;
 
 /** The arrow-key screen. Undefined when the owner quits. */
-async function askOnScreen(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean, moved?: ReadonlyMap<string, string>): Promise<Answers> {
-  const screen = newScreen(entriesFor(changes, { firstRound, ...(vendorLines && { vendor: vendorLines }), ...(moved && { moved }) }));
+async function askOnScreen(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean, moved?: ReadonlyMap<string, string>, dropped?: ReadonlyMap<string, ShownDrop>): Promise<Answers> {
+  const screen = newScreen(entriesFor(changes, { firstRound, ...(vendorLines && { vendor: vendorLines }), ...(moved && { moved }), ...(dropped && { dropped }) }));
   const out = process.stdout;
   const draw = () => out.write(`\x1b[H\x1b[2J${render(screen)}`);
   emitKeypressEvents(process.stdin);
@@ -404,7 +408,7 @@ async function askOnScreen(changes: Change[], vendorLines: string[] | undefined,
 }
 
 /** Plain questions, one per line, for input that is not a terminal. */
-async function askByLines(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean): Promise<Answers> {
+async function askByLines(changes: Change[], vendorLines: string[] | undefined, firstRound: boolean, dropped?: ReadonlyMap<string, ShownDrop>): Promise<Answers> {
   // Lines are queued as they arrive, so answers typed ahead (or pasted at once) are never lost.
   const rl = createInterface({ input: process.stdin, terminal: false });
   const queued: string[] = [];
@@ -446,6 +450,8 @@ async function askByLines(changes: Change[], vendorLines: string[] | undefined, 
     if (c.note) console.log(`  (your note last time: ${c.note})`);
     const why = c.why ?? (c.kind === "session" ? "the session record: its topic, questions and the reasons above" : "(no reason given)");
     console.log(`\n${c.op} ${c.id}  [${c.kind}, ${SYMBOL[c.op]}]\n    why: ${why}\n${c.shown.map((l) => `    ${l}`).join("\n")}`);
+    const drop = c.op === "-" ? dropped?.get(c.id) : undefined;
+    if (drop) console.log(`    dropped as a repeat (K32) of ${drop.repeatOf} (${drop.score.toFixed(2)}), which is kept:\n      ${String(drop.kept["title"] ?? "")}\n      ${String(drop.kept["text"] ?? "")}`);
     const a = (await ask(c.op === "-" ? "  [a]pprove removal, [s]kip: " : "  [a]pprove, [c]orrect, [r]eject, [s]kip: ")).toLowerCase();
     if (a === "a") decisions.set(c.id, { kind: "approve" });
     else if (a === "c" && c.op !== "-") decisions.set(c.id, { kind: "correct", note: await ask("    note for the agent: ") });

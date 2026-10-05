@@ -155,7 +155,7 @@ describe("alfred approve — refuses to start when it could show the owner somet
     const b = await approveBlockers({ base, invalid: ["e.broken"], changes });
     expect(b.map((x) => x.message)).toEqual([
       "1 definition cannot be read: e.broken — fix them first (alfred check shows why)",
-      "e.past is a past record (event) and would be marked removed — the past is never removed (K5); this is a bug or tampering",
+      "e.past is a past record (event) and would be marked removed — the past is never removed (K5) unless it moved (§9.4) or was dropped as a repeat (K32); this is a bug or tampering",
     ]);
   });
 });

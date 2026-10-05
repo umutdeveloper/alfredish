@@ -48,6 +48,13 @@ describe("K27 — approval records are checked", () => {
     expect(state?.items.get("f.b")?.hash).toBe("h2");
   });
 
+  it("every id a signed record removed is remembered (K32: a signed drop has nothing left to judge)", async () => {
+    const base = await memory([{ r: rec(1, null, { "f.a": "h1", "f.b": "h2" }), key: owner }, { r: { ...rec(2, null, {}), removed: ["f.b"] }, key: owner }]);
+    const { state } = await loadApprovals(base, join(keyDir, "anchor.pub"));
+    expect(state?.items.has("f.b")).toBe(false);
+    expect([...(state?.removed ?? [])]).toEqual(["f.b"]);
+  });
+
   it("a record changed after signing is red, and nothing after it counts", async () => {
     const base = await memory([{ r: rec(1, null, { "f.a": "h1" }), key: owner, tamper: (t) => t.replace('"h1"', '"h9"') }]);
     const { state, issues } = await loadApprovals(base, join(keyDir, "anchor.pub"));

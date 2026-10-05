@@ -4,7 +4,8 @@
 # Update (run by alfred-approve itself when a memory uses another Alfredish):
 #                                 sudo /bin/sh /usr/local/lib/alfredish/install-approve.sh --update <commit>
 #   It runs this root-owned copy of the installer, never the one in the Alfredish folder (which an agent can edit),
-#   takes only that commit's code from the Alfredish source, and leaves the anchor, node and the command untouched.
+#   takes only that commit's code, model and installer from the Alfredish source, and leaves the anchor, node and the
+#   command untouched.
 # Testing without root:          PREFIX=/tmp/x ANCHOR_DIR=/tmp/x/etc OWNER_PUB=/path/key.pub NO_CHOWN=1 sh scripts/install-approve.sh
 set -eu
 # The owner's node, found before the PATH is fixed (the first install copies it).
@@ -35,12 +36,15 @@ if [ "${1:-}" = "--update" ]; then
   HERE="$(cat "$LIB/SOURCE")"
   TMP="$(mktemp -d)"
   trap 'rm -rf "$TMP"' EXIT
-  as_owner git -C "$HERE" archive "$COMMIT" -- src package.json > "$TMP/code.tar" || { echo "update: Alfredish $COMMIT not found in $HERE"; exit 1; }
+  as_owner git -C "$HERE" archive "$COMMIT" -- src package.json models scripts/install-approve.sh > "$TMP/code.tar" || { echo "update: Alfredish $COMMIT not found in $HERE"; exit 1; }
   mkdir "$TMP/code"
   tar -xf "$TMP/code.tar" -C "$TMP/code"
-  # Replace the code; keep the installer, the source, node, the anchor and the command as they are.
-  rm -rf "$LIB/src" "$LIB/package.json" "$LIB/node_modules"
-  cp -R "$TMP/code/src" "$TMP/code/package.json" "$LIB/"
+  # Replace the code, the embedding model (K32 judges a drop with it) and the installer with that commit's; keep the
+  # source, node, the anchor and the command as they are.
+  rm -rf "$LIB/src" "$LIB/package.json" "$LIB/node_modules" "$LIB/models"
+  cp -R "$TMP/code/src" "$TMP/code/package.json" "$TMP/code/models" "$LIB/"
+  cp "$TMP/code/scripts/install-approve.sh" "$LIB/install-approve.sh.new"
+  mv "$LIB/install-approve.sh.new" "$LIB/install-approve.sh"
   cp -R "$HERE/node_modules" "$LIB/"
   printf '%s\n' "$COMMIT" > "$LIB/PINNED"
   lock "$LIB"
@@ -57,10 +61,10 @@ else
 fi
 [ -n "$KEY" ] || { echo "no public key named $KEY_NAME in the agent at $SOCKET"; exit 1; }
 
-# 2. A copy of Alfredish (code, its node_modules, no models: approving needs no embedding model).
+# 2. A copy of Alfredish: code, its node_modules and the embedding model (K32 judges a dropped repeat with it).
 rm -rf "$LIB"
 mkdir -p "$LIB" "$PREFIX/bin" "$ANCHOR_DIR"
-cp -R "$HERE/src" "$HERE/package.json" "$HERE/node_modules" "$LIB/"
+cp -R "$HERE/src" "$HERE/package.json" "$HERE/node_modules" "$HERE/models" "$LIB/"
 # Node itself is copied too: the system's node may live in a folder the owner (and so an agent) can write.
 [ -n "$NODE" ] || { echo "node not found"; exit 1; }
 cp "$NODE" "$LIB/node"

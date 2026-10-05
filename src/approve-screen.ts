@@ -15,6 +15,7 @@ const W = {
     start: (n: number) => `First approval: ${n} definitions make up the memory today.`, startWhy: "Approve the memory as it is as your starting point, or look at each definition.",
     moved: (n: number, m: string) => `${n} definitions moved to ${m}`, movedWhy: (m: string) => `each is in ${m}'s owner-signed state, where you approved it; approve their removal here together, or look one by one`,
     machine: (n: number) => `${n} machine-checked changes`, machineWhy: "each is checked by a built-in test that looks at the world (shown below); approve them together, or look one by one",
+    dropped: "dropped as a repeat", kept: "kept", droppedWhy: "it only retells the kept event below (K32): approve to remove it from the memory; it stays in the signed records and in git",
     vendor: "the copy of Alfredish", noReason: "(no reason given)", sessionWhy: "the session record: its topic, questions and the reasons above",
     ops: { "+": "new", "~": "changed", "-": "removed" }, approved: "approved", corrected: "correction", rejected: "rejected", skipped: "skipped",
 } as const;
@@ -35,7 +36,14 @@ export interface Entry {
 
 export const VENDOR_KEY = "vendor/alfredish";
 
-export function entriesFor(changes: readonly Change[], o: { vendor?: string[]; firstRound: boolean; moved?: ReadonlyMap<string, string> }): Entry[] {
+/** A past event dropped as a repeat (K32), as alfred approve shows it: the event it retold, their score, the kept text. */
+export interface ShownDrop {
+  repeatOf: string;
+  score: number;
+  kept: Record<string, unknown>;
+}
+
+export function entriesFor(changes: readonly Change[], o: { vendor?: string[]; firstRound: boolean; moved?: ReadonlyMap<string, string>; dropped?: ReadonlyMap<string, ShownDrop> }): Entry[] {
   const w = W;
   const out: Entry[] = [];
   if (o.firstRound) out.push({ key: "__start", title: w.start(changes.length), sub: "", why: w.startWhy, lines: [], buttons: ["startAll", "startOne"], start: true });
@@ -55,6 +63,13 @@ export function entriesFor(changes: readonly Change[], o: { vendor?: string[]; f
     }
     const lines = [...(c.note ? [`${w.noteLast}: ${c.note}`, ""] : []), ...c.shown, ...(c.test ? [`${w.test}: ${c.test}`] : [])];
     const why = c.why ?? (c.kind === "session" ? w.sessionWhy : w.noReason);
+    const drop = c.op === "-" ? o.dropped?.get(c.id) : undefined;
+    if (drop) {
+      // K32: both accounts in full, side by side in reading order; skip first, so pressing on never removes the past.
+      const kept = [`${w.kept}: ${drop.repeatOf} (${drop.score.toFixed(2)})`, `  ${String(drop.kept["title"] ?? "")}`, `  ${String(drop.kept["text"] ?? "")}`];
+      out.push({ key: c.id, title: c.id, sub: `${c.kind} · ${w.dropped}`, why: w.droppedWhy, lines: [...lines, "", ...kept], buttons: ["skip", "approveRemoval"] });
+      continue;
+    }
     out.push({ key: c.id, title: c.id, sub: `${c.kind} · ${w.ops[c.op]}`, why, lines, buttons: c.op === "-" ? ["approveRemoval", "skip"] : ["approve", "correct", "reject", "skip"] });
   }
   return out;
