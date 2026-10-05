@@ -30,12 +30,27 @@ export function referenceSnapshot(state: ApprovedState): Snapshot {
 const OWNER_VERIFY = /^(review by owner|confirmed by owner|when owner confirms|waiting for owner)/;
 const isLocal = (x: unknown) => typeof x === "object" && x !== null && (x as { kind?: unknown }).kind === "local";
 
-/** The latest session reason for each changed id (sessions carry `changes`, §14). */
-function reasons(snap: Snapshot): Map<string, string> {
-  const sessions = Object.values(snap).filter((e) => e.kind === "session").sort((a, b) => String(a.data["at"]).localeCompare(String(b.data["at"])));
-  const out = new Map<string, string>();
-  for (const s of sessions) for (const [id, why] of Object.entries((s.data["changes"] as Record<string, string> | undefined) ?? {})) out.set(id, why);
-  return out;
+/**
+ * The latest session reason for each changed id (sessions carry `changes`, §14): sessions by day, and within a day a
+ * session the owner signed and that is unchanged before one that is new or changed. `twice` names the ids two new or
+ * changed sessions of one day give a reason for — the order between them is unknown, so the owner could read a stale one.
+ */
+export function latestReasons(snap: Snapshot, state?: ApprovedState): { why: Map<string, string>; twice: Map<string, { at: string; sessions: string[] }> } {
+  const fresh = (id: string) => state?.items.get(id)?.hash !== snap[id]!.hash;
+  const sessions = Object.entries(snap).filter(([, e]) => e.kind === "session")
+    .sort(([a, x], [b, y]) => String(x.data["at"]).localeCompare(String(y.data["at"])) || Number(fresh(a)) - Number(fresh(b)) || a.localeCompare(b));
+  const why = new Map<string, string>();
+  const by = new Map<string, { at: string; sessions: string[] }>();
+  for (const [sid, s] of sessions) {
+    const at = String(s.data["at"]);
+    for (const [id, w] of Object.entries((s.data["changes"] as Record<string, string> | undefined) ?? {})) {
+      why.set(id, w);
+      if (!fresh(sid)) continue;
+      const seen = by.get(id);
+      by.set(id, seen && seen.at === at ? { at, sessions: [...seen.sessions, sid] } : { at, sessions: [sid] });
+    }
+  }
+  return { why, twice: new Map([...by].filter(([, v]) => v.sessions.length > 1)) };
 }
 
 /**
@@ -45,7 +60,7 @@ function reasons(snap: Snapshot): Map<string, string> {
  */
 export function checkApproval(snap: Snapshot, defs: readonly Def[], state: ApprovedState): Issue[] {
   const issues: Issue[] = [];
-  const why = reasons(snap);
+  const { why, twice } = latestReasons(snap, state);
   const unapproved = new Set<string>();
   const byId = new Map(defs.map((d) => [d.id, d]));
   for (const [id, now] of Object.entries(snap)) {
@@ -74,6 +89,11 @@ export function checkApproval(snap: Snapshot, defs: readonly Def[], state: Appro
     const d = byId.get(id);
     if (d && [...confirmedPaths([d])].some((p) => tests(now).includes(p) && !tests(was).includes(p))) {
       red("a local() path the owner has not signed (in its test) — it counts only after alfred approve");
+      continue;
+    }
+    const two = twice.get(id);
+    if (two) {
+      red(`two of ${two.at}'s sessions not yet signed give a reason (${two.sessions.join(", ")}) — keep it in one, so the owner reads the right one`);
       continue;
     }
     const correction = state.corrections.get(id);

@@ -117,6 +117,8 @@ export interface LinkedVerify {
   evidence: Evidence;
   /** The target's kind (e.g. "account"), checked against the signed content. */
   targetKind: string;
+  /** A rule link that follows the target's latest signed wording instead of pinning `hash` (empty then); nothing may rest on it. */
+  follows?: true;
 }
 
 export type Verify = Condition | AgentProbeVerify | SourceVerify | FromFindingVerify | ReviewVerify | LinkedVerify;

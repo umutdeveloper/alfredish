@@ -16,7 +16,7 @@ export function describeVerify(v: Verify): string {
     case "source":
       return `source ${v.url} (read ${v.readAt}, ttl ${v.ttl})`;
     case "linked":
-      return `linked to ${v.memory}:${v.target} (${v.targetKind}, signed ${v.hash.slice(0, 16)}, evidence ${v.evidence})`;
+      return `linked to ${v.memory}:${v.target} (${v.targetKind}, ${v.follows ? "follows its signed wording" : `signed ${v.hash.slice(0, 16)}`}, evidence ${v.evidence})`;
     case "fromFinding":
       return `finding ${v.finding.research?.id ?? "?"}#${v.finding.key} (ttl ${v.ttl})`;
     case "review":

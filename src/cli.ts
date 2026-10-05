@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
 import { nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
-import { areaDefs, checkDrops, checkHistory, headSnapshot, judgeDrops, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
+import { areaDefs, checkDrops, checkHistory, headSnapshot, judgeDrops, linkLine, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
 import { APPROVALS_DIR, DEFAULT_ANCHOR, loadApprovals, vendorDir } from "./approval.ts";
 import { checkAlfredishCopy, checkApproval, referenceSnapshot } from "./owner.ts";
@@ -74,7 +74,7 @@ done
       console.error(`${arg}:${arg2}: ${r.why}`);
       return 1;
     }
-    console.log(`link({ id: "link.${arg}.${arg2}", title: ${JSON.stringify(String(r.data["title"] ?? arg2))}, origin: <this session>, memory: "${arg}", target: "${arg2}", kind: "${String(r.data["kind"])}", hash: "${r.hash}", evidence: "${String(r.data["evidence"])}" })`);
+    console.log(linkLine(arg!, arg2!, r));
     return 0;
   }
   const ctx = nodeContext(base);

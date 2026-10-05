@@ -169,7 +169,7 @@ export async function evalVerify(v: Verify, today: ISODate, ctx: ProbeContext, p
       if (!ctx.signed) return { status: "red", reason: `${at}: other memories cannot be read here` };
       const r = await ctx.signed(v.memory, v.target, v.hash);
       if ("why" in r) return { status: "red", reason: `${at}: ${r.why}` };
-      if (r.hash !== v.hash) return { status: "yellow", reason: `${at} changed since it was linked (${changedFields(r.was, r.data)}) — look again, then re-link` };
+      if (!v.follows && r.hash !== v.hash) return { status: "yellow", reason: `${at} changed since it was linked (${changedFields(r.was, r.data)}) — look again, then re-link` };
       if (r.data["kind"] !== v.targetKind) return { status: "red", reason: `${at}: linked as a ${v.targetKind}, signed as a ${String(r.data["kind"])}` };
       if (r.data["evidence"] !== v.evidence) return { status: "red", reason: `${at}: linked with evidence "${v.evidence}", signed with "${String(r.data["evidence"])}"` };
       return { status: "green" };
@@ -422,6 +422,11 @@ export async function compile(roots: readonly unknown[], o: CompileOptions): Pro
     parked++;
     if ((await conditionStatus(p.revisitWhen, o.today, o.ctx, probes)) === "green") issues.push({ id, status: "yellow", rule: "K12", message: `parked, revisit condition came true: ${p.reason}` });
   };
+  // §9.2: what rests on another memory's definition must see when it changes, so it never rests on a following link.
+  for (const d of defs) {
+    const on = [...deps(d), ...(d.kind === "idea" ? (d.basedOn ?? []) : [])];
+    for (const l of on) if (l.kind === "link" && l.verify.kind === "linked" && l.verify.follows) issues.push({ id: l.id, status: "red", rule: "K12", message: `${d.id} rests on this following link — a link something rests on pins its target: link it with its hash` });
+  }
   for (const d of defs) {
     if (d.kind === "link" && !used.has(d) && !(d.verify.kind === "linked" && d.verify.targetKind === "rule")) issues.push({ id: d.id, status: "red", rule: "K12", message: "unused (nothing rests on this link)" });
     if (d.kind === "fact" && !used.has(d)) {

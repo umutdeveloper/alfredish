@@ -35,7 +35,11 @@ function verifyProblems(v: unknown, field: string, onlyConditions = false): stri
   const need = (ok: boolean, what: string) => { if (!ok) out.push(`${field} (${k}): ${what}`); };
   if (k === "probe") need(isStr(v["describe"]) && typeof v["run"] === "function", "needs a description and a test to run");
   if (k === "agentProbe") need(isStr(v["describe"]) && isDuration(v["ttl"]), "needs a description and a ttl like 30d");
-  if (k === "linked") need(isStr(v["memory"]) && isStr(v["target"]) && isStr(v["targetKind"]) && isStr(v["hash"]) && /^[0-9a-f]{16}$/.test(String(v["hash"])) && EVIDENCE.has(v["evidence"] as string), "needs memory, target, kind, hash (16 hex) and evidence");
+  if (k === "linked") {
+    const follows = v["follows"] === true;
+    need(isStr(v["memory"]) && isStr(v["target"]) && isStr(v["targetKind"]) && (follows ? v["hash"] === "" : isStr(v["hash"]) && /^[0-9a-f]{16}$/.test(String(v["hash"]))) && EVIDENCE.has(v["evidence"] as string), "needs memory, target, kind, hash (16 hex) or follows, and evidence");
+    if (follows && v["targetKind"] !== "rule") out.push("only a link to a rule may follow its target; pin anything else with its hash");
+  }
   if (k === "source") need(isStr(v["url"]) && isDate(v["readAt"]) && isDuration(v["ttl"]), "needs url, readAt (YYYY-MM-DD) and ttl");
   if (k === "fromFinding") need(isObj(v["finding"]) && isDefOf((v["finding"] as Obj)["research"], new Set(["research"])) && isDuration(v["ttl"]), "needs a finding of a research and a ttl");
   if (k === "review") need(v["by"] === "owner" && isDate(v["at"]) && isDuration(v["every"]), 'needs by: "owner", at (YYYY-MM-DD) and every (like 90d)');

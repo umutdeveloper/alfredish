@@ -436,13 +436,20 @@ export async function saveProbeCache(base: string, cache: ProbeCache): Promise<v
  * The rules this memory links to in other memories, each as signed at its pinned hash (the earlier signed version while
  * the link is yellow), so AGENTS.md shows exactly what the owner approved here.
  */
+/** What `alfred link <memory> <id>` prints: a rule is followed, anything else pinned with its signed hash (§9.2). */
+export function linkLine(memory: string, id: string, r: { hash: string; data: Readonly<Record<string, unknown>> }): string {
+  const kind = String(r.data["kind"]);
+  const pin = kind === "rule" ? "follows: true" : `hash: "${r.hash}"`;
+  return `link({ id: "link.${memory}.${id}", title: ${JSON.stringify(String(r.data["title"] ?? id))}, origin: <this session>, memory: "${memory}", target: "${id}", kind: "${kind}", ${pin}, evidence: "${String(r.data["evidence"])}" })`;
+}
+
 export async function linkedRules(defs: readonly Def[], ctx: ProbeContext): Promise<LinkedRule[]> {
   const out: LinkedRule[] = [];
   for (const d of defs) {
     if (d.kind !== "link" || d.verify.kind !== "linked" || d.verify.targetKind !== "rule" || !ctx.signed) continue;
     const r = await ctx.signed(d.verify.memory, d.verify.target, d.verify.hash);
     if ("why" in r) continue; // the link itself is red and says why
-    const data = r.hash === d.verify.hash ? r.data : r.was;
+    const data = d.verify.follows || r.hash === d.verify.hash ? r.data : r.was;
     if (data) out.push({ link: d.id, from: `${d.verify.memory}:${d.verify.target}`, text: String(data["text"] ?? ""), appliesTo: String(data["appliesTo"] ?? "other") });
   }
   return out;

@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { entriesFor, newScreen, render, step, VENDOR_KEY, type Key, type ShownDrop } from "./approve-screen.ts";
 import { APPROVALS_DIR, hashTree, loadApprovals, readAnchor, recordName, run, sha256, sharedCopyRoot, signFile, vendorDir, type ApprovalRecord, type ApprovedState } from "./approval.ts";
 import { diffSnapshots, type Snapshot } from "./snapshot.ts";
+import { latestReasons } from "./owner.ts";
 import type { ISODate } from "./types.ts";
 
 export type Op = "+" | "~" | "-";
@@ -131,18 +132,12 @@ export function groupOf(op: Op, kind: string, data: Record<string, unknown> | un
   return /^(page|http|header|file|git|domain|github|dns|all of:|linked to) /.test(verify) && !verify.includes(" — runs: ") ? "machine" : "owner";
 }
 
-function reasons(snap: Snapshot): Map<string, string> {
-  const out = new Map<string, string>();
-  const sessions = Object.values(snap).filter((e) => e.kind === "session").sort((a, b) => String(a.data["at"]).localeCompare(String(b.data["at"])));
-  for (const s of sessions) for (const [id, why] of Object.entries((s.data["changes"] as Record<string, string> | undefined) ?? {})) out.set(id, why);
-  return out;
-}
 
 /** Every difference between the memory now and what the owner last signed, owner's calls first. */
 export function changesSince(state: ApprovedState | undefined, snap: Snapshot, marks: Marks = PLAIN): Change[] {
   const approved: Snapshot = {};
   for (const [id, it] of state?.items ?? []) approved[id] = { kind: it.kind, hash: it.hash, data: it.data };
-  const why = reasons(snap);
+  const { why } = latestReasons(snap, state);
   const out: Change[] = diffSnapshots(approved, snap).map((d) => {
     const data = snap[d.id]?.data;
     const c: Change = { id: d.id, op: d.op, kind: d.kind, group: groupOf(d.op, d.kind, data), detail: d.detail, shown: shownFor(d.op, approved[d.id]?.data, data, marks) };

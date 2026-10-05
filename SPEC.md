@@ -305,6 +305,13 @@ Where the memories are is the machine's, not a memory's (K15): `~/.alfredish/mem
 (overridable with `ALFREDISH_MEMORIES`). A link nothing rests on is red (K12), except a link to a rule: a project memory links
 the owner's own rules (how to talk, how to keep memory), and AGENTS.md lists each with where it comes from, in the
 wording signed at the pinned hash — while the link is yellow, the earlier wording stays until it is re-linked.
+
+A link to a **rule** that nothing rests on may **follow** it instead (`link({ …, follows: true })`, no `hash`; `alfred link`
+prints this form for a rule): it is green while the target is a rule in that memory's signed state, and AGENTS.md lists
+the rule in its latest signed wording. The owner signing a change of the rule in its own memory is the review; a memory
+that follows it needs no round of its own, and a following link's record never changes with its target. What rests on
+another memory's definition must see when it changes, so a following link that anything rests on (`restsOn`, `on`, …)
+is red: pin it.
 ### 9.4 Moving a project into its own memory
 
 The owner's **home memory** (e.g. Alfred) keeps the owner's personal knowledge and the owner's rules; each project gets
@@ -450,7 +457,10 @@ detached SSH signature (`ssh-keygen -Y sign`, namespace `alfredish`) in `approva
 the public keys and `ssh-keygen`.
 
 **Reasons.** Every definition that differs from the last record carries a one-line reason in the session it was
-changed in (`session({ …, changes: { "<id>": "<why>" } })`); a change without a reason is red.
+changed in (`session({ …, changes: { "<id>": "<why>" } })`); a change without a reason is red. The reason shown is the
+latest: sessions are read by day, and within one day a session the owner signed and that is unchanged since comes
+before one that is new or changed; two new or changed sessions of one day giving a reason for the same id is red (K26)
+— keep the reason in one of them, so the owner never reads a stale reason.
 
 **`alfred approve`** — run by the owner, in their own terminal; installed outside the memory, writable only by an
 administrator, so editing the memory's copy of Alfredish does not change it. It lists every difference since the last

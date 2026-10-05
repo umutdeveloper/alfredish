@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compile, collect } from "../src/compiler.ts";
-import { linkedRules } from "../src/repo.ts";
+import { linkLine, linkedRules } from "../src/repo.ts";
 import { buildViews } from "../src/views.ts";
 import { readSigned } from "../src/context.ts";
 import { decision, link, review, session } from "../src/dsl.ts";
@@ -100,7 +100,7 @@ describe("§9.2 link: resting on another memory's definition as its owner signed
   it("is described by everything it pins (K25), and is well-formed only when built with link() (K16)", () => {
     const l = linked(H1);
     expect(describeVerify(l.verify)).toBe(`linked to alfred:self.experience (fact, signed ${H1}, evidence source)`);
-    expect(shapeProblems({ ...l, verify: { ...l.verify, hash: "nothex" } })).toContain("verify (linked): needs memory, target, kind, hash (16 hex) and evidence");
+    expect(shapeProblems({ ...l, verify: { ...l.verify, hash: "nothex" } })).toContain("verify (linked): needs memory, target, kind, hash (16 hex) or follows, and evidence");
   });
 
   it("a link nothing rests on is red (K12)", async () => {
@@ -129,5 +129,39 @@ describe("§9.2 link: resting on another memory's definition as its owner signed
     const rules = await linkedRules(collect([honest]).defs, ctx());
     expect(rules.map((r) => r.text)).toEqual(["Be honest: do not soften bad news."]);
     expect((await compile([honest], { today, ctx: ctx() })).results.get(honest.id)!.status).toBe("yellow");
+  });
+});
+
+describe("§9.2 a link that follows the owner's rule instead of pinning it", () => {
+  const follow = (o: { target?: string; kind?: string } = {}) =>
+    link({ id: "link.alfred.rule.talk.honest", title: "Honest", origin: s, memory: "alfred", target: o.target ?? "rule.talk.honest", kind: o.kind ?? "rule", follows: true, evidence: "human" });
+
+  it("is green after the owner signs a change there, and AGENTS.md shows the latest signed wording", async () => {
+    const l = follow();
+    expect((await compile([l], { today, ctx: ctx() })).results.get(l.id)!.status).toBe("green");
+    expect((await linkedRules(collect([l]).defs, ctx())).map((r) => r.text)).toEqual(["Soften bad news a little."]);
+  });
+
+  it("its record never changes with its target, so the memory that follows needs no approval round", () => {
+    expect(describeVerify(follow().verify)).toBe("linked to alfred:rule.talk.honest (rule, follows its signed wording, evidence human)");
+  });
+
+  it("is red when the rule is not in the other memory's signed state", async () => {
+    const l = follow({ target: "rule.talk.never" });
+    expect((await compile([l], { today, ctx: ctx() })).results.get(l.id)!.status).toBe("red");
+  });
+
+  it("only a rule is followed, and nothing may rest on a following link: what rests on it must see a change (pin it)", async () => {
+    expect(shapeProblems(follow({ target: "self.experience", kind: "fact" }))).toContain("only a link to a rule may follow its target; pin anything else with its hash");
+    const l = follow();
+    const onIt = decision({ id: "d.onRule", title: "Rests on the rule", origin: s, restsOn: [l], review: "90d", verify: review({ by: "owner", at: today, every: "90d" }), evidence: "human" });
+    expect((await compile([onIt], { today, ctx: ctx() })).issues).toContainEqual(expect.objectContaining({ id: l.id, status: "red", message: "d.onRule rests on this following link — a link something rests on pins its target: link it with its hash" }));
+  });
+
+  it("alfred link prints the following form for a rule and the pinned form for anything else", () => {
+    expect(linkLine("alfred", "rule.talk.honest", { hash: "d4d4d4d4d4d4d4d4", data: { kind: "rule", title: "Honest", evidence: "human" } })).toBe(
+      'link({ id: "link.alfred.rule.talk.honest", title: "Honest", origin: <this session>, memory: "alfred", target: "rule.talk.honest", kind: "rule", follows: true, evidence: "human" })');
+    expect(linkLine("alfred", "self.experience", { hash: H1, data: { kind: "fact", title: "Exp", evidence: "source" } })).toBe(
+      `link({ id: "link.alfred.self.experience", title: "Exp", origin: <this session>, memory: "alfred", target: "self.experience", kind: "fact", hash: "${H1}", evidence: "source" })`);
   });
 });
