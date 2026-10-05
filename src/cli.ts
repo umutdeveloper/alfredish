@@ -6,7 +6,7 @@ import { chmod, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { collect, compile } from "./compiler.ts";
-import { linkedFromOthers, nodeContext, readSigned } from "./context.ts";
+import { linkedFromOthers, memoriesOnMachine, nodeContext, readSigned } from "./context.ts";
 import { formatCheck, formatGet, formatWhy } from "./format.ts";
 import { areaDefs, checkDrops, checkHistory, headSnapshot, judgeDrops, linkLine, linkedRules, ownerRules, checkImports, checkNewEvents, checkNewKeys, movedAway, checkPast, checkReachable, checkTypeEscapes, checkViews, diff, loadProbeCache, saveProbeCache, writeViews } from "./repo.ts";
 import { embedder, KEY_SIMILARITY_THRESHOLD, keyText, rank } from "./similarity.ts";
@@ -102,7 +102,7 @@ done
   switch (cmd) {
     case "build": {
       const approval = existsSync(join(base, APPROVALS_DIR));
-      const changed = await writeViews(buildViews(defs, report, day, { approval, linkedRules: await linkedRules(defs, ctx) }), snap, repo);
+      const changed = await writeViews(buildViews(defs, report, day, { approval, linkedRules: await linkedRules(defs, ctx), memories: await memoriesOnMachine(base) }), snap, repo);
       console.log(changed.length ? changed.map((c) => (c.startsWith("removed ") ? c.replace("removed ", "removed: ") : `written: ${c}`)).join("\n") : "no changes");
       return 0;
     }
@@ -117,7 +117,7 @@ done
         ...approvals.issues,
         ...(signed ? checkApproval(snap, defs, signed) : []),
         ...(signed ? await checkAlfredishCopy(base, signed, process.env["ALFREDISH_ANCHOR"] ?? DEFAULT_ANCHOR) : []),
-        ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined, linkedRules: linked }), snap, repo)),
+        ...(await checkViews(buildViews(defs, report, day, { approval: signed !== undefined, linkedRules: linked, memories: await memoriesOnMachine(base) }), snap, repo)),
         ...ownerRules(defs, linked),
         ...(await checkPast(snap, day, repo, reference)),
         ...(await checkDrops(snap, day, reference ?? (await headSnapshot(repo)), undefined, signed?.removed)),

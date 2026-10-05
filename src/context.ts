@@ -69,6 +69,25 @@ export async function linkedFromOthers(base: string, o: { memoriesFile?: string;
   return out;
 }
 
+/** §9.3: the memories registered on this machine, each with its identity rule as its owner signed it. */
+export async function memoriesOnMachine(base: string, o: { memoriesFile?: string; anchor?: string } = {}): Promise<{ name: string; here: boolean; identity: string }[]> {
+  let reg: Record<string, unknown>;
+  try {
+    reg = JSON.parse(await readFile(o.memoriesFile ?? MEMORIES_FILE, "utf8")) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  const anchor = o.anchor ?? process.env["ALFREDISH_ANCHOR"] ?? DEFAULT_ANCHOR;
+  const out: { name: string; here: boolean; identity: string }[] = [];
+  for (const [name, where] of Object.entries(reg).sort(([a], [b]) => a.localeCompare(b))) {
+    if (typeof where !== "string") continue;
+    const { state, issues } = await loadApprovals(where, anchor);
+    const id = !issues.length ? state?.items.get("rule.identity") : undefined;
+    out.push({ name, here: resolve(where) === resolve(base), identity: id ? String(id.data["text"] ?? "") : "(no signed identity rule yet)" });
+  }
+  return out;
+}
+
 // 30 s: some sites answer through a redirect in 10-20 s (YouTube's channel pages); probes run in parallel, so a slow
 // site costs one wait, not one per probe.
 export function nodeContext(baseDir: string, timeoutMs = 30_000): ProbeContext {

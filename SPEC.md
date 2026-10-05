@@ -285,6 +285,11 @@ hook` installs one pre-commit hook for the repository that checks every memory t
 shared copy or the packages change. `github(repo).isPrivate()` lets a memory test that the repository holding it stays
 private.
 
+**Every memory lists the others.** AGENTS.md ends with the memories registered on this machine (`memories.json`, K15),
+each with its `rule.identity` as its owner signed it — what it holds and who works in it — so an agent working in one
+memory knows where else knowledge lives and what to link to. It is generated from the registry and the signed records,
+never written by hand, so it cannot go stale: a change there turns the view stale (K6) until the next build.
+
 ### 9.2 Links to other memories
 
 A memory may rest on a definition of another memory on the same machine with a `link` (`link({ id, title, origin,

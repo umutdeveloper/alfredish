@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { compile, collect } from "../src/compiler.ts";
 import { linkLine, linkedRules } from "../src/repo.ts";
 import { buildViews } from "../src/views.ts";
-import { linkedFromOthers, readSigned } from "../src/context.ts";
+import { linkedFromOthers, memoriesOnMachine, readSigned } from "../src/context.ts";
 import { account, decision, link, review, session } from "../src/dsl.ts";
 import { recordName, sha256, signFile, type ApprovalRecord } from "../src/approval.ts";
 import { describeVerify } from "../src/snapshot.ts";
@@ -184,5 +184,23 @@ describe("K12 — what another memory links to is used, though nothing in this m
     const k12 = async (o: { linkedFrom?: Set<string> }) => (await compile([google], { today, ctx: ctx(), ...o })).issues.filter((i) => i.rule === "K12").map((i) => i.message);
     expect(await k12({})).toEqual(["no asset uses this account"]);
     expect(await k12({ linkedFrom: linked })).toEqual([]);
+  });
+});
+
+describe("§9.3 every memory lists the others in AGENTS.md", () => {
+  it("lists each registered memory with its signed identity rule, this one marked, an unsigned one said so", async () => {
+    const prev = await readFile(join(alfred, "approvals", recordName(4)), "utf8");
+    await sign(5, { "rule.identity": { kind: "rule", hash: "f6f6f6f6f6f6f6f6", data: { kind: "rule", id: "rule.identity", appliesTo: "identity", text: "Alfred is Umut's advisor for his whole life.", evidence: "human" } } }, prev);
+    const ada = await mkdtemp(join(tmpdir(), "alfredish-link-ada-"));
+    const reg = join(keys, "memories-list.json");
+    await writeFile(reg, JSON.stringify({ alfred, ada }));
+    const list = await memoriesOnMachine(ada, { memoriesFile: reg, anchor: join(keys, "anchor.pub") });
+    expect(list).toEqual([
+      { name: "ada", here: true, identity: "(no signed identity rule yet)" },
+      { name: "alfred", here: false, identity: "Alfred is Umut's advisor for his whole life." },
+    ]);
+    const report = await compile([], { today, ctx: ctx() });
+    const agents = buildViews([], report, today, { memories: list }).find((v) => v.path === "AGENTS.md")!.body;
+    expect(agents).toContain("## memories on this Mac\nThe memories registered on this machine, each with its identity rule as its owner signed it:\n- **ada** (this memory) — (no signed identity rule yet)\n- **alfred** — Alfred is Umut's advisor for his whole life.");
   });
 });

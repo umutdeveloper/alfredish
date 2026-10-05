@@ -55,7 +55,7 @@ export interface LinkedRule {
   appliesTo: string;
 }
 
-export function buildViews(defs: readonly Def[], report: Report, today: ISODate, o: { approval?: boolean; linkedRules?: readonly LinkedRule[] } = {}): View[] {
+export function buildViews(defs: readonly Def[], report: Report, today: ISODate, o: { approval?: boolean; linkedRules?: readonly LinkedRule[]; memories?: readonly { name: string; here: boolean; identity: string }[] } = {}): View[] {
   const views: View[] = [];
   const of = <K extends Def["kind"]>(k: K) => defs.filter((d): d is Extract<Def, { kind: K }> => d.kind === k).sort(byId);
   const sessions = of("session").sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
@@ -117,7 +117,9 @@ export function buildViews(defs: readonly Def[], report: Report, today: ISODate,
     ];
     const groups = [...new Set(rules.map((r) => r.appliesTo))].sort();
     const protocol = o.approval ? `## alfredish (owner approval)\n${APPROVAL_PROTOCOL.map((l) => `- ${l}`).join("\n")}\n\n` : "";
-    det("AGENTS.md", `# Agent rules\n\n${protocol}${groups.map((g) => `## ${g}\n${rules.filter((r) => r.appliesTo === g).sort((a, b) => a.ref.localeCompare(b.ref)).map((r) => `- ${r.text} (${r.ref})`).join("\n")}`).join("\n\n") || "- none"}\n`);
+    // §9.3: the other memories on this machine, so an agent knows where else knowledge lives.
+    const mems = o.memories?.length ? `\n## memories on this Mac\nThe memories registered on this machine, each with its identity rule as its owner signed it:\n${o.memories.map((m) => `- **${m.name}**${m.here ? " (this memory)" : ""} — ${m.identity}`).join("\n")}\n` : "";
+    det("AGENTS.md", `# Agent rules\n\n${protocol}${groups.map((g) => `## ${g}\n${rules.filter((r) => r.appliesTo === g).sort((a, b) => a.ref.localeCompare(b.ref)).map((r) => `- ${r.text} (${r.ref})`).join("\n")}`).join("\n\n") || "- none"}\n${mems}`);
   }
 
   // sessions/<id>.md and log.md
