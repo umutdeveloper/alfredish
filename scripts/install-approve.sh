@@ -7,6 +7,11 @@
 #   takes only that commit's code from the Alfredish source, and leaves the anchor, node and the command untouched.
 # Testing without root:          PREFIX=/tmp/x ANCHOR_DIR=/tmp/x/etc OWNER_PUB=/path/key.pub NO_CHOWN=1 sh scripts/install-approve.sh
 set -eu
+# The owner's node, found before the PATH is fixed (the first install copies it).
+NODE="$(command -v node || true)"
+# Fixed, system-only PATH: chown lives in /usr/sbin, and alfred-approve runs this with PATH=/usr/bin:/bin.
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+export PATH
 PREFIX="${PREFIX:-/usr/local}"
 ANCHOR_DIR="${ANCHOR_DIR:-/etc/alfredish}"
 KEY_NAME="${KEY_NAME:-alfred-owner}"
@@ -57,7 +62,8 @@ rm -rf "$LIB"
 mkdir -p "$LIB" "$PREFIX/bin" "$ANCHOR_DIR"
 cp -R "$HERE/src" "$HERE/package.json" "$HERE/node_modules" "$LIB/"
 # Node itself is copied too: the system's node may live in a folder the owner (and so an agent) can write.
-cp "$(command -v node)" "$LIB/node"
+[ -n "$NODE" ] || { echo "node not found"; exit 1; }
+cp "$NODE" "$LIB/node"
 git -C "$HERE" rev-parse --short HEAD > "$LIB/PINNED" 2>/dev/null || true
 # Where it came from: updates take their code from here, and a memory's vendor/alfredish copy is compared with it.
 echo "$HERE" > "$LIB/SOURCE"
