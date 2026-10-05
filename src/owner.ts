@@ -3,6 +3,7 @@
 
 import { deps, type Issue } from "./compiler.ts";
 import { hashTree, vendorDir, type ApprovedState } from "./approval.ts";
+import { confirmedPaths } from "./paths.ts";
 import type { Snapshot } from "./snapshot.ts";
 import type { Def } from "./types.ts";
 
@@ -45,6 +46,7 @@ export function checkApproval(snap: Snapshot, defs: readonly Def[], state: Appro
   const issues: Issue[] = [];
   const why = reasons(snap);
   const unapproved = new Set<string>();
+  const byId = new Map(defs.map((d) => [d.id, d]));
   for (const [id, now] of Object.entries(snap)) {
     const was = state.items.get(id);
     if (was && was.hash === now.hash) continue;
@@ -66,6 +68,13 @@ export function checkApproval(snap: Snapshot, defs: readonly Def[], state: Appro
       red("a local() path the owner has not signed — it counts only after alfred approve");
       continue;
     }
+    // The same for a local() path inside a test (file(local(...))): its record keeps only the test's description.
+    const tests = (x: typeof now | undefined) => `${String(x?.data["verify"] ?? "")}\n${String(x?.data["due"] ?? "")}`;
+    const d = byId.get(id);
+    if (d && [...confirmedPaths([d])].some((p) => tests(now).includes(p) && !tests(was).includes(p))) {
+      red("a local() path the owner has not signed (in its test) — it counts only after alfred approve");
+      continue;
+    }
     const correction = state.corrections.get(id);
     if (correction && correction.hash === now.hash) {
       issues.push({ id, status: "yellow", rule: "K26", message: `the owner asked for a correction: "${correction.note}" — rewrite it as the note says` });
@@ -78,7 +87,6 @@ export function checkApproval(snap: Snapshot, defs: readonly Def[], state: Appro
     issues.push({ id, status: "yellow", rule: "K26", message: `unapproved${why.has(id) ? `: ${why.get(id)}` : ""} — the owner sees it in alfred approve` });
   }
   // Resting on unapproved content makes a definition unapproved too (K3).
-  const byId = new Map(defs.map((d) => [d.id, d]));
   const flagged = new Set(issues.map((i) => i.id));
   const memo = new Map<string, string | undefined>();
   const restsOnUnapproved = (d: Def, seen = new Set<Def>()): string | undefined => {

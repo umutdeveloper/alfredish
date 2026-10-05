@@ -188,8 +188,8 @@ Strongest to weakest: `live` (tried in the world) · `source` (read in a primary
   definition's hash (K5, §14) covers what its test really does.
 - **K26 — Owner approval** (§14): a definition whose content differs from what the owner last signed is **unapproved**.
   Unapproved is shown as yellow with the reason, never as green, and never stops a commit. Something resting on an
-  unapproved definition is unapproved too (K3). A `review`, a `confirm` or a `local()` that the owner has not signed
-  counts as not given at all: a renewal the agent wrote itself cannot lift red.
+  unapproved definition is unapproved too (K3). A `review`, a `confirm` or a `local()` that the owner has not signed —
+  a location, or a path inside a test (`file(local(...))`) — counts as not given at all: a renewal the agent wrote itself cannot lift red.
 - **K27 — Approval records are checked:** every record's signature is valid for a key on the owner's anchor list, and the
   records form an unbroken chain. A bad signature, an unknown key or a broken chain is red.
 - **K28 — The signed state is the reference:** K5, K20, K21, K23 and K29 compare with the last signed record, not `HEAD`

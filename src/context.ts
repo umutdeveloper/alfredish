@@ -41,7 +41,9 @@ export async function readSigned(memory: string, id: string, pinned: string, o: 
   return was ? { hash: now.hash, data: now.data, was } : { hash: now.hash, data: now.data };
 }
 
-export function nodeContext(baseDir: string, timeoutMs = 15_000): ProbeContext {
+// 30 s: some sites answer through a redirect in 10-20 s (YouTube's channel pages); probes run in parallel, so a slow
+// site costs one wait, not one per probe.
+export function nodeContext(baseDir: string, timeoutMs = 30_000): ProbeContext {
   const pages = new Map<string, Promise<{ status: number; headers: Headers; body: string }>>();
   const signedCache = new Map<string, Promise<SignedLookup>>();
   const loaded = new Map<string, ReturnType<typeof loadApprovals>>();
