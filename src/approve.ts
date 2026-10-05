@@ -72,6 +72,30 @@ export function textChange(before: string, after: string, marks: Marks = PLAIN):
   return out.join(" ");
 }
 
+const isTextMap = (v: unknown) => typeof v === "object" && v !== null && !Array.isArray(v) && Object.values(v).every((x) => typeof x === "string");
+const isTextList = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
+const textMap = (v: unknown): Record<string, string> => (isTextMap(v) ? (v as Record<string, string>) : {});
+const textList = (v: unknown): string[] => (isTextList(v) ? (v as string[]) : []);
+
+/** A changed map of texts (e.g. a session's reasons): only the entries that were added, removed or changed. */
+export function mapChange(was: Record<string, string>, now: Record<string, string>, marks: Marks = PLAIN): string[] {
+  const out: string[] = [];
+  for (const k of [...new Set([...Object.keys(was), ...Object.keys(now)])].sort()) {
+    const x = was[k];
+    const y = now[k];
+    if (x === y) continue;
+    if (x === undefined) out.push(`  ${marks.added(`+ ${k}: ${y}`)}`);
+    else if (y === undefined) out.push(`  ${marks.gone(`- ${k}: ${x}`)}`);
+    else out.push(`  ~ ${k}: ${textChange(x, y, marks)}`);
+  }
+  return out;
+}
+
+/** A changed list of texts: only the items that were added or removed. */
+export function listChange(was: readonly string[], now: readonly string[], marks: Marks = PLAIN): string[] {
+  return [...was.filter((x) => !now.includes(x)).map((x) => `  ${marks.gone(`- ${x}`)}`), ...now.filter((x) => !was.includes(x)).map((x) => `  ${marks.added(`+ ${x}`)}`)];
+}
+
 function shownFor(op: Op, was: Record<string, unknown> | undefined, now: Record<string, unknown> | undefined, marks: Marks): string[] {
   if (op !== "~") {
     const data = (op === "+" ? now : was) ?? {};
@@ -88,6 +112,8 @@ function shownFor(op: Op, was: Record<string, unknown> | undefined, now: Record<
     const y = now?.[k];
     if (JSON.stringify(x) === JSON.stringify(y)) continue;
     if (typeof x === "string" && typeof y === "string") out.push(`${k}: ${textChange(x, y, marks)}`);
+    else if (isTextMap(x ?? {}) && isTextMap(y ?? {})) out.push(`${k}:`, ...mapChange(textMap(x), textMap(y), marks));
+    else if (isTextList(x ?? []) && isTextList(y ?? [])) out.push(`${k}:`, ...listChange(textList(x), textList(y), marks));
     else out.push(`${k}: ${[x !== undefined ? marks.gone(show(x)) : "", y !== undefined ? marks.added(show(y)) : ""].filter(Boolean).join(" ")}`);
   }
   return out;

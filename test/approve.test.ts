@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { approveBlockers, buildRecord, changesSince, groupOf, selfUpdate, textChange, TOOL_SRC, writeSigned, type Decision } from "../src/approve.ts";
+import { approveBlockers, buildRecord, changesSince, groupOf, listChange, mapChange, selfUpdate, textChange, TOOL_SRC, writeSigned, type Decision } from "../src/approve.ts";
 import { loadApprovals, recordName, type ApprovedState } from "../src/approval.ts";
 import type { Snapshot } from "../src/snapshot.ts";
 
@@ -68,6 +68,20 @@ describe("alfred approve — what changed (§14)", () => {
     expect(c.find((x) => x.id === "n")!.shown).toEqual(["title: New", `text: ${old}`, "appliesTo: memory"]);
     const s = changesSince(undefined, { s: item("session", "h", { id: "s", kind: "session", questions: ["Why?", "How?"], changes: { r: "because" } }) });
     expect(s[0]!.shown).toEqual(["questions:", "  - Why?", "  - How?", "changes:", "  r: because"]);
+  });
+});
+
+describe("alfred approve — a changed list or map shows only what changed", () => {
+  it("a session's reasons: only the added, removed and changed entries, never the whole map again", () => {
+    const was = { "a.one": "first reason", "b.two": "second reason", "c.three": "old words here" };
+    const now = { "a.one": "first reason", "c.three": "new words here", "d.four": "a new reason" };
+    expect(mapChange(was, now)).toEqual(["  [-- b.two: second reason-]", "  ~ c.three: [-old-] {+new+} words here", "  {++ d.four: a new reason+}"]);
+    const c = changesSince(state({ s: item("session", "h1", { title: "S", changes: was }) }), { s: item("session", "h2", { title: "S", changes: now }) });
+    expect(c[0]!.shown.join("\n")).not.toContain("a.one"); // unchanged entries are not shown again
+  });
+
+  it("a list: only the items added or removed", () => {
+    expect(listChange(["Why?", "How?"], ["Why?", "When?"])).toEqual(["  [-- How?-]", "  {++ When?+}"]);
   });
 });
 
