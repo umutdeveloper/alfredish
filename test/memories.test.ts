@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { vendorDir } from "../src/approval.ts";
+import { ownerAgent } from "./helpers.ts";
 
 // A repository of memories (§2): memories/esik and memories/ada share one Alfredish copy at the repository root.
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -144,10 +145,7 @@ describe("a shared copy is approved once, for every memory of the repository (§
     const f = join(root, "vendor/alfredish/src/format.ts");
     const before = await readFile(f, "utf8");
     await writeFile(f, before + "\n// another change\n");
-    const sock = join(keys, `agent-${Date.now()}.sock`);
-    await exec("ssh-agent", ["-a", sock]);
-    const env = { ...process.env, SSH_AUTH_SOCK: sock };
-    await exec("ssh-add", [join(keys, "owner")], { env });
+    const { sock, env } = await ownerAgent(keys, join(keys, "owner"));
     const r = await new Promise<{ out: string }>((done) => {
       const p = spawn(process.execPath, [join(root, "vendor/alfredish/src/cli.ts"), "approve", "--agent", sock], { cwd: join(root, "ada"), env });
       let out = "";

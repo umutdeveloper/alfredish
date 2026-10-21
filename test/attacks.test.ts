@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { hashTree, recordName, signFile, type ApprovalRecord } from "../src/approval.ts";
+import { ownerAgent } from "./helpers.ts";
 
 const exec = promisify(execFile);
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -555,11 +556,7 @@ export const rests = decision({ key: kX4, id: "work.restsOnBoth", title: "Plan o
     await because(dir, { "rule.budget": "Umut raised the budget" });
     await alfred(dir, "build");
     expect((await gate(dir)).green).toBe(false); // unapproved
-    // An ssh-agent holding the owner's key stands in for the owner's key store (e.g. Secretive).
-    const sock = join(ownerKeys, `agent-${Date.now()}.sock`);
-    await exec("ssh-agent", ["-a", sock]);
-    const env = { ...process.env, SSH_AUTH_SOCK: sock };
-    await exec("ssh-add", [join(ownerKeys, "owner")], { env });
+    const { sock, env } = await ownerAgent(ownerKeys, join(ownerKeys, "owner"));
     // Owner's calls in order: rule.budget, then today's session (which carries the reason). Approve both.
     const r = await shInput(dir, process.execPath, ["vendor/alfredish/src/cli.ts", "approve", "--agent", sock], "a\na\n", env);
     expect(r.out).toContain("rule.budget  [rule, changed]");
@@ -567,7 +564,6 @@ export const rests = decision({ key: kX4, id: "work.restsOnBoth", title: "Plan o
     expect(r.out).toContain("approval 2 signed");
     const after = await gate(dir);
     expect(after.out, after.out).toMatch(/^\s*✓/);
-    await exec("ssh-agent", ["-k"], { env: { ...env, SSH_AGENT_PID: "" } }).catch(() => undefined);
   }, TIMEOUT);
 
   it("AGENTS.md carries Alfredish's approval protocol in every memory with approvals, and only there", async () => {
@@ -582,10 +578,7 @@ export const rests = decision({ key: kX4, id: "work.restsOnBoth", title: "Plan o
     await edit(dir, "memory/rules.ts", "Spend at most 1,000 EUR", "Spend at most 1,200 EUR");
     await because(dir, { "rule.budget": "Umut raised the budget" });
     await alfred(dir, "build");
-    const sock = join(ownerKeys, `agent-c-${Date.now()}.sock`);
-    await exec("ssh-agent", ["-a", sock]);
-    const env = { ...process.env, SSH_AUTH_SOCK: sock };
-    await exec("ssh-add", [join(ownerKeys, "owner")], { env });
+    const { sock, env } = await ownerAgent(ownerKeys, join(ownerKeys, "owner"));
     const approve = () => shInput(dir, process.execPath, ["vendor/alfredish/src/cli.ts", "approve", "--agent", sock], round, env);
     // The owner corrects the rule and approves the session.
     let round = "c\nit is 1,100 EUR\na\n";

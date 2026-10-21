@@ -1,3 +1,7 @@
+import { execFile } from "node:child_process";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { onTestFinished } from "vitest";
 import type { ProbeContext } from "../src/types.ts";
 import { key, review, session } from "../src/dsl.ts";
 import type { KeyDef, SessionDef } from "../src/types.ts";
@@ -25,3 +29,16 @@ export function fakeCtx(pages: Record<string, { status?: number; body?: string; 
 /** A key of its own for a test fact, so K22 never ties two test facts together. */
 export const tk = (id: string, origin: SessionDef): KeyDef =>
   key({ subject: id.replace(/[^A-Za-z0-9]+(.)?/g, (_, c: string | undefined) => (c ? c.toUpperCase() : "")).replace(/^./, (c) => c.toLowerCase()), name: "value", valueType: "text", describe: `the value of ${id}`, origin });
+
+let agents = 0;
+/** An ssh-agent holding `key`, standing in for the owner's key store (e.g. Secretive). It is stopped when the test ends, green or red. */
+export async function ownerAgent(dir: string, key: string): Promise<{ sock: string; env: NodeJS.ProcessEnv }> {
+  const sock = join(dir, `agent-${process.pid}-${++agents}.sock`);
+  const { stdout } = await promisify(execFile)("ssh-agent", ["-a", sock]);
+  const pid = Number(/SSH_AGENT_PID=(\d+)/.exec(stdout)?.[1]);
+  if (!pid) throw new Error(`ssh-agent did not report its pid:\n${stdout}`);
+  onTestFinished(() => void process.kill(pid));
+  const env = { ...process.env, SSH_AUTH_SOCK: sock };
+  await promisify(execFile)("ssh-add", [key], { env });
+  return { sock, env };
+}
